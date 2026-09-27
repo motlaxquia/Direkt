@@ -614,10 +614,15 @@ static void compilar(ed_gui_t *g, const char *salida)
 	 * escribe a un temporal y se vuelve a leer de ahi. Asi, compilar nunca
 	 * puede dejar el documento a medias aunque el .map tenga un error. */
 	{
-		char tmp[] = "/tmp/direkt-edit-XXXXXX";
-		int fd = mkstemp(tmp);
-		FILE *f = fdopen(fd, "wb");
-		char *texto = save_map_to_string(g->doc->map);
+		char tmp[TMP_PATH_MAX];
+		FILE *f;
+		char *texto;
+		if (!temp_file(tmp, sizeof tmp, "edit"))
+			error("no se puede crear el temporal para compilar");
+		texto = save_map_to_string(g->doc->map);
+		f = fopen(tmp, "wb");
+		if (!f)
+			error("no se puede escribir el temporal para compilar");
 		fwrite(texto, 1, strlen(texto), f);
 		fclose(f);
 		free(texto);

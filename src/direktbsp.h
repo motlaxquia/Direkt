@@ -34,6 +34,10 @@ void *xcalloc(size_t n, size_t size);
 void *xrealloc(void *p, size_t n);
 char *xstrdup(const char *s);
 
+/* Ruta de un temporal nuevo. Devuelve 1 si se creo. Ver common.c. */
+#define TMP_PATH_MAX 512
+int temp_file(char *buf, size_t n, const char *tag);
+
 /* ------------------------------------------------------------------ contents
  *
  * Estos numeros los lee el juego con esta significacion (SV_PointContents y el
