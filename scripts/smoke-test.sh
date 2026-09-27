@@ -20,6 +20,13 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# El interprete de Python no siempre se llama igual. En MSYS2 y en Windows es
+# "python", en Linux y en macOS "python3". Se busca una vez aqui y se usa la
+# variable en el resto del script, en vez de suponer que existe python3 y que
+# el que tester vaya a recordarlo.
+PY_CMD="$(command -v python3 || command -v python || true)"
+[[ -n "$PY_CMD" ]] || { echo "ERROR: hace falta python3 o python" >&2; exit 1; }
 BUILD="$REPO_ROOT/build"
 MAP="${MAP:-lqdm1}"
 SETTLE="${SETTLE:-6}"
@@ -41,7 +48,7 @@ head_() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 die()  { printf '\033[31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
 centre_mean() {
-  python3 - "$1" <<'PY'
+  $PY_CMD - "$1" <<'PY'
 import subprocess, sys
 p = sys.argv[1]
 # El recorte es PORCENTAJE, no un tamaño fijo. La captura es de la pantalla
@@ -65,7 +72,7 @@ PAK="$BUILD/lq/full/id1/pak0.pak"
 [[ -f "$PAK" ]] || die "faltan los datos. Ejecuta 'make deps'."
 
 # El inventario del PAK, una sola vez: se reusa para sprites y assets.
-pak_list() { python3 "$REPO_ROOT/tools/pakinfo.py" "$PAK" --list; }
+pak_list() { $PY_CMD "$REPO_ROOT/tools/pakinfo.py" "$PAK" --list; }
 
 # Los tres sprites del juego. El formato es el de QuakeSpasm/Ironwail: cabecera
 # de 36 bytes con numframes en 0x18, y detras un int de tipo de frame por cada
@@ -75,7 +82,7 @@ pak_list() { python3 "$REPO_ROOT/tools/pakinfo.py" "$PAK" --list; }
 # que delata un parser mal hecho: si numframes se lee de 0x04, que es donde esta
 # la version, sale 1 siempre y el sprite parece valido mientras se pierde toda
 # la animacion. Estos numeros estan contados a mano sobre los ficheros.
-spr_json="$(python3 "$REPO_ROOT/tools/sprinfo.py" "$PAK" --json 2>/dev/null)" \
+spr_json="$($PY_CMD "$REPO_ROOT/tools/sprinfo.py" "$PAK" --json 2>/dev/null)" \
   || die "tools/sprinfo.py no pudo leer $PAK"
 n_spr="$(printf '%s' "$spr_json" | grep -c '"name":')"
 if ((n_spr > 0)); then
@@ -87,7 +94,7 @@ fi
 for spec in s_bubble:2 s_light:1 s_explod:6; do
   spr="${spec%:*}"
   want="${spec##*:}"
-  got="$(printf '%s' "$spr_json" | python3 -c '
+  got="$(printf '%s' "$spr_json" | $PY_CMD -c '
 import json, sys
 nombre = sys.argv[1]
 for sprite in json.load(sys.stdin):

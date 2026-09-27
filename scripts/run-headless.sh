@@ -10,6 +10,13 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# El interprete de Python no siempre se llama igual. En MSYS2 y en Windows es
+# "python", en Linux y en macOS "python3". Se busca una vez aqui y se usa la
+# variable en el resto del script, en vez de suponer que existe python3 y que
+# el que tester vaya a recordarlo.
+PY_CMD="$(command -v python3 || command -v python || true)"
+[[ -n "$PY_CMD" ]] || { echo "ERROR: hace falta python3 o python" >&2; exit 1; }
 BUILD="$REPO_ROOT/build"
 ENGINE_BIN="$BUILD/bin/ironwail"
 LQ="$BUILD/lq/full"          # basedir: el motor exige <basedir>/id1/pak0.pak
@@ -216,7 +223,7 @@ if ((WANT_SHOT)); then
     echo "FALLO: no se pudo capturar la pantalla de $DISPLAY" >&2
     failed=1
   else
-    read -r mean sd lit <<<"$(python3 - "$shot" "$MIN_LIT" "$WIDTH" "$HEIGHT" <<'PY'
+    read -r mean sd lit <<<"$($PY_CMD - "$shot" "$MIN_LIT" "$WIDTH" "$HEIGHT" <<'PY'
 import subprocess, sys
 p, min_lit = sys.argv[1], float(sys.argv[2])
 W, H = int(sys.argv[3]), int(sys.argv[4])

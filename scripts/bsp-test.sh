@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prueba del generador de .bsp (build/bin/direkt-bsp).
 #
-#   scripts/bsp-test.sh
+#   scripts/bsp-test.sh [--sin-motor]
 #
 # Cuatro capas, de la mas barata a la mas cara:
 #
@@ -13,7 +13,10 @@
 #   4. El motor carga el mapa, el jugador se apoya en el suelo y anda hasta
 #      toparse con un muro. Esto es lo que de verdad importa.
 #
-# El paso 4 necesita el motor y los datos, o sea make engine primero.
+# El paso 4 necesita el motor y los datos, o sea make engine primero, y ademas
+# una pantalla: sin ella no hay contexto de OpenGL y el motor no arranca. Con
+# --sin-motor se hacen solo los pasos 1 a 3, que es lo que se puede probar en
+# macOS o en un runner de Windows.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -32,6 +35,26 @@ pass() { printf '  \033[32mPASA\033[0m  %s\n' "$*"; ok=$((ok + 1)); }
 fail() { printf '  \033[31mFALLA\033[0m %s\n' "$*"; ko=$((ko + 1)); }
 head_() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+# El interprete de Python no siempre se llama igual. En MSYS2 y en Windows es
+# "python", en Linux y en macOS "python3". Se busca una vez aqui y se usa la
+# variable en el resto del script, en vez de suponer que existe python3 y que
+# el que tester vaya a recordarlo.
+PY_CMD="$(command -v python3 || command -v python || true)"
+[[ -n "$PY_CMD" ]] || { echo "ERROR: hace falta python3 o python" >&2; exit 1; }
+
+# Sin pantalla no hay forma de arrancar el motor, y en macOS y en un runner de
+# Windows no la hay. Con --sin-motor se prueban las secciones 1 a 4, que son
+# las que no necesitan ventana; la 5 se deja para Linux.
+SIN_MOTOR=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --sin-motor) SIN_MOTOR=1 ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \?//'; exit 0 ;;
+    *) die "opcion desconocida: $1" ;;
+  esac
+  shift
+done
 
 [[ -x "$BSP" ]] || die "no existe $BSP. Ejecuta 'make bsp'."
 
@@ -65,7 +88,7 @@ done
 head_ "3. El validador detecta un .bsp roto"
 cp "$OUT" "$BUILD/bsp-roto.bsp"
 # Se cambia el planenum del primer clipnode por uno fuera de rango.
-python3 - "$BUILD/bsp-roto.bsp" <<'PY'
+$PY_CMD - "$BUILD/bsp-roto.bsp" <<'PY'
 import struct, sys
 p = sys.argv[1]
 d = bytearray(open(p, "rb").read())
@@ -89,19 +112,21 @@ else
   for m in "${MAPS[@]}"; do
     nombre="$(basename "$m")"
     "$BSP" "$m" "$OUT" >/dev/null 2>&1
-    salida="$(python3 "$REPO_ROOT/scripts/hullcheck.py" "$m" "$OUT" | tail -1)"
+    salida="$($PY_CMD "$REPO_ROOT/scripts/hullcheck.py" "$m" "$OUT" | tail -1)"
     if grep -qE "^0 discrepancias" <<<"$salida"; then
       pass "$nombre: $salida"
     else
       fail "$nombre: $salida"
-      python3 "$REPO_ROOT/scripts/hullcheck.py" "$m" "$OUT" | grep MAL | sed 's/^/        /' >&2 || true
+      $PY_CMD "$REPO_ROOT/scripts/hullcheck.py" "$m" "$OUT" | grep MAL | sed 's/^/        /' >&2 || true
     fi
   done
 fi
 
 # ------------------------------------------------------------------- 5. motor
 head_ "5. El motor carga el mapa y el jugador se apoya y anda"
-if [[ ! -x "$ENGINE_BIN" ]]; then
+if ((SIN_MOTOR)); then
+  echo "  se salta: hace falta pantalla y se pidio --sin-motor"
+elif [[ ! -x "$ENGINE_BIN" ]]; then
   fail "no hay motor en $ENGINE_BIN; se salta la prueba en vivo (make engine)"
 else
   if "$REPO_ROOT/scripts/run-headless.sh" --map direkt-test --settle 10 --walk --min-lit 0 \

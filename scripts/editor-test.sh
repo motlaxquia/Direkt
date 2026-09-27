@@ -20,6 +20,13 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# El interprete de Python no siempre se llama igual. En MSYS2 y en Windows es
+# "python", en Linux y en macOS "python3". Se busca una vez aqui y se usa la
+# variable en el resto del script, en vez de suponer que existe python3 y que
+# el que tester vaya a recordarlo.
+PY_CMD="$(command -v python3 || command -v python || true)"
+[[ -n "$PY_CMD" ]] || { echo "ERROR: hace falta python3 o python" >&2; exit 1; }
 BUILD="$REPO_ROOT/build"
 EDIT="$BUILD/bin/direkt-edit"
 SHOTS="$BUILD/shots"
@@ -58,7 +65,7 @@ if [[ -z "${DISPLAY:-}" ]]; then
 fi
 
 analiza_ppm() {
-  python3 - "$1" <<'PY'
+  $PY_CMD - "$1" <<'PY'
 import sys
 d = open(sys.argv[1], "rb").read()
 assert d[:2] == b"P6", "no es un PPM"
