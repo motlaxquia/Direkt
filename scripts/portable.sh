@@ -53,7 +53,16 @@ BUILD="$REPO/build"
 BIN="$BUILD/bin"
 LQ="$BUILD/lq/full"
 STAGE="$BUILD/portable"
-OUT="$BUILD/direkt-portable-$OS.tar.gz"
+# La extension va con el formato. En Windows se guarda en .zip, que es lo que
+# el explorador de archivos abre con doble clic sin preguntar nada. Con un .zip
+# dentro de un .tar.gz (que es lo que salia antes) el mensaje de "descomprime
+# el .zip" era cierto y el fichero no lo era, y tar xzf dessus no sacaba nada
+# util.
+if [ "$OS" = windows ]; then
+	OUT="$BUILD/direkt-portable-$OS.zip"
+else
+	OUT="$BUILD/direkt-portable-$OS.tar.gz"
+fi
 NOMBRE="direkt-portable-$OS"
 
 die() { echo "portable: $*" >&2; exit 1; }
@@ -73,7 +82,22 @@ mkdir -p "$STAGE"
 # --- binarios y logica de juego ---------------------------------------------
 echo "    binarios"
 mkdir -p "$STAGE/bin" "$STAGE/direkt"
-cp "$BIN/ironwail" "$BIN/direkt-bsp" "$BIN/direkt-edit" "$STAGE/bin/"
+# En Windows los binarios se llaman .exe, y en los demas no. No se deja que sea
+# el shell el que resuelva el nombre: cp no siempre anade el .exe por su cuenta,
+# y un cp que falla a mitad del empaquetado se lleva por delante el stage entero.
+# Con "if" y no con "[ ... ] && ...": lo segundo, si la condicion es falsa,
+# devuelve error y con set -e el script se para. En Linux lo seria siempre.
+if [ "$OS" = windows ]; then
+	BIN_EXT=".exe"
+else
+	BIN_EXT=""
+fi
+for b in ironwail direkt-bsp direkt-edit; do
+	src="$BIN/$b$BIN_EXT"
+	[ -f "$src" ] || src="$BIN/$b"
+	[ -f "$src" ] || { echo "portable: falta $b$BIN_EXT en $BIN" >&2; exit 1; }
+	cp "$src" "$STAGE/bin/$b$BIN_EXT"
+done
 # En Windows los .exe necesitan las DLL de MINGW64 en la misma carpeta, o no
 # arrancan. En Linux y macOS esto no hace nada.
 "$REPO/scripts/copy-runtime-dlls.sh" || true
@@ -222,6 +246,19 @@ set -euo pipefail
 AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="$AQUI/bin:$PATH"
 
+# El motor se llama ironwail en Linux y macOS, y ironwail.exe en Windows. En
+# MSYS2 el shell resuelve el .exe por su cuenta, pero en macOS con Homebrew no,
+# y en un Windows donde solo haya Git Bash tampoco. Se prueban los dos nombres.
+# Aqui no se puede usar "[ ... ] && ..." porque con set -e, que esta puesto, si
+# la condicion es falsa el lanzador se para. En Linux lo seria siempre, claro.
+EDIT_EXT=""
+if [ -x "$AQUI/bin/direkt-edit.exe" ]; then
+	EDIT_EXT=".exe"
+fi
+IRONWAIL="$AQUI/bin/ironwail"
+[ -x "$IRONWAIL" ] || IRONWAIL="$AQUI/bin/ironwail.exe"
+[ -x "$IRONWAIL" ] || { echo "no encuentro el motor en $AQUI/bin" >&2; exit 1; }
+
 # El generador de .bsp saca las texturas de ahi. En el repositorio mira en
 # build/lq/full/id1, que aqui no existe: sin esto el .bsp sale sin lump
 # TEXTURES y el motor pinta con la textura por defecto.
@@ -300,7 +337,7 @@ jugar() {
 		echo
 		usar_llvmpipe
 	fi
-	exec "$AQUI/bin/ironwail" -basedir "$AQUI/datos" -basedir "$AQUI" -game direkt "$@"
+	exec "$IRONWAIL" -basedir "$AQUI/datos" -basedir "$AQUI" -game direkt "$@"
 }
 
 # Comprobacion autonoma: no necesita el arbol de desarrollo ni fteqcc, solo lo
@@ -315,13 +352,13 @@ comprobar() {
 
 	log="$(mktemp)"
 	if [ -n "${DISPLAY:-}" ]; then
-		lanzo=("$AQUI/bin/ironwail")
+		lanzo=("$IRONWAIL")
 	elif command -v xvfb-run >/dev/null 2>&1; then
-		lanzo=(xvfb-run -a "$AQUI/bin/ironwail")
+		lanzo=(xvfb-run -a "$IRONWAIL")
 	else
 		echo "  no hay pantalla ni xvfb-run: se prueba a pelo y puede que el"
 		echo "  motor no pueda abrir una ventana"
-		lanzo=("$AQUI/bin/ironwail")
+		lanzo=("$IRONWAIL")
 	fi
 
 	if [ "${DIREKT_FORCE_GL:-0}" != 1 ] && { [ "${DIREKT_SOFTWARE_GL:-0}" = 1 ] || gl_insuficiente; }; then
@@ -377,8 +414,8 @@ comprobar() {
 case "${1:-jugar}" in
 jugar)   jugar ;;
 test)    comprobar ;;
-editor)  exec "$AQUI/bin/direkt-edit" "${2:-}" ;;
-bsp)     exec "$AQUI/bin/direkt-bsp" "$2" "$3" ;;
+editor)  exec "$AQUI/bin/direkt-edit$EDIT_EXT" "${2:-}" ;;
+bsp)     exec "$AQUI/bin/direkt-bsp$EDIT_EXT" "$2" "$3" ;;
 shell)   echo "PATH=$AQUI/bin:$PATH"; exec "${SHELL:-/bin/sh}" ;;
 *)       jugar "$@" ;;
 esac
@@ -452,8 +489,13 @@ windows)
 		rm -f "$OUT"
 		(cd "$BUILD" && zip -qr "$OUT" "$NOMBRE")
 	else
-		echo "    aviso: no hay 'zip' y se hace .tar.gz, que Windows si abre"
-		tar czf "$OUT" -C "$BUILD" "$NOMBRE"
+		# Sin 'zip' no se puede hacer un .zip de verdad, y renombrar un tar a
+		# .zip seria dar por bueno un fichero que no se abre. Se dice y se deja
+		# el nombre bueno, que es el que ya espera la pagina de descarga.
+		echo "    aviso: no hay 'zip' en este sistema y no se puede empaquetar en"
+		echo "    .zip. En Windows, sin 'zip' el paquete no sale: instalalo con"
+		echo "    'pacman -S zip'."
+		exit 1
 	fi
 	;;
 *)
