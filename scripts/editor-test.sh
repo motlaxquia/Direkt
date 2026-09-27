@@ -59,7 +59,27 @@ head_ "2. El dibujo produce geometria de verdad"
 
 # Se necesita un servidor X. scripts/xvfb-env.sh lo levanta y deja el numero de
 # display en el entorno.
-if [[ -z "${DISPLAY:-}" ]]; then
+#
+# En macOS y en un runner de Windows no hay Xvfb. Con --sin-x se hace solo la
+# logica de edicion, que es lo que se puede comprobar sin pantalla; el dibujo se
+# prueba en Linux.
+#
+# El cuerpo entero de la seccion va dentro del if SIN indentar un solo espacio:
+# si se indenta, los heredoc de dentro (los que cierran con PY a la izquierda)
+# dejan de cerrar y el script no llega ni a parsear.
+SIN_X=0
+[[ "${1:-}" == "--sin-x" ]] && SIN_X=1
+
+if ((SIN_X)); then
+  echo "  se salta: hace falta servidor X y se pidio --sin-x"
+elif ! command -v Xvfb >/dev/null 2>&1 && [[ -z "${DISPLAY:-}" ]]; then
+  echo "  se salta: no hay Xvfb ni servidor X. Para comprobar el dibujo"
+  echo "            automaticamente hace falta Linux."
+fi
+if (( ! SIN_X )); then
+if ! command -v Xvfb >/dev/null 2>&1 && [[ -z "${DISPLAY:-}" ]]; then
+  echo "  (no se pudo levantar X: se salta igualmente)"
+elif [[ -z "${DISPLAY:-}" ]]; then
   # shellcheck source=/dev/null
   source "$REPO_ROOT/scripts/xvfb-env.sh" || true
 fi
@@ -116,6 +136,8 @@ else
 fi
 
 # ------------------------------------------------- 3. ida y vuelta de .map
+fi
+
 head_ "3. Abrir y volver a guardar un mapa existente no lo estropea"
 for m in "${MAPS[@]}"; do
   nombre="$(basename "$m")"
