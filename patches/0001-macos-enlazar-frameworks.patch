@@ -1,0 +1,36 @@
+--- a/CMakeLists.txt	2026-09-27 18:35:59.666922698 +0000
++++ b/CMakeLists.txt	2026-09-27 18:35:59.669922698 +0000
+@@ -61,7 +61,32 @@
+ endif()
+ 
+ add_executable(ironwail ${IWAIL_SRC})
+-if (UNIX)
++if (APPLE)
++	# En macOS, y no antes, hay que enlazar los frameworks a mano. La rama de
++	# UNIX de abajo solo mete "m", y con eso el ejecutable se enlazaba en Intel
++	# porque el dylib de SDL2 arrastraba IOKit de rebote. En Apple Silicon (arm64)
++	# ya no lo hace, y el enlazado falla con
++	#   Undefined symbols for architecture arm64: "_IOMasterPort" ...
++	# o sea, funciones de IOKit que existen de sobra pero contra las que no se
++	# ha enlazado nada. Se piden explicitamente.
++	#
++	# IOKit     : la aceleracion del raton (in_sdl.c)
++	# Cocoa     : NSAutoreleasePool y demas en in_sdl.c
++	# CoreFoundation : CFSTR() y los tipos de IOKit
++	# OpenGL    : el motor dibuja con el OpenGL del sistema, que va como
++	#             framework, no como -lGL
++	target_link_libraries(ironwail PRIVATE
++		"-framework IOKit"
++		"-framework Cocoa"
++		"-framework CoreFoundation"
++		"-framework OpenGL"
++	)
++	target_link_options(ironwail PRIVATE
++		"-Wl,-rpath,@loader_path"
++		"-Wl,-rpath,/usr/local/lib"
++	)
++	set(ENABLE_USERDIRS TRUE CACHE STRING "Enable user directories")
++elseif (UNIX)
+ 	target_link_libraries(ironwail PRIVATE m)
+ 	set(ENABLE_USERDIRS TRUE CACHE STRING "Enable user directories")
+ elseif (WIN32)

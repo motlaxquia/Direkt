@@ -143,8 +143,8 @@ cmd_verify() {
 }
 
 case "${1:-all}" in
-  all)      fetch_engine >/dev/null; fetch_data; info "Dependencias listas en build/" ;;
-  engine)   fetch_engine >/dev/null ;;
+  all)      fetch_engine; fetch_data; info "Dependencias listas en build/" ;;
+  engine)   fetch_engine ;;
   data)     fetch_data ;;
   lock)     cmd_lock ;;
   verify)   cmd_verify ;;
