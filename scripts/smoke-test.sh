@@ -44,11 +44,13 @@ centre_mean() {
   python3 - "$1" <<'PY'
 import subprocess, sys
 p = sys.argv[1]
-W, H = 640, 480
-cw, ch = int(W * 0.35), int(H * 0.35)
-x0, y0 = (W - cw) // 2, (H - ch) // 2
+# El recorte es PORCENTAJE, no un tamaño fijo. La captura es de la pantalla
+# entera de Xvfb, que no tiene por que ser la que pidio el juego: si hay otro
+# Xvfb ya encendido, o se cambia DIREKT_WIDTH/HEIGHT, el resultado es otro.
+# Con 640x480 fijos, una captura de 1280x720 recortaba una zona del borde
+# negro, y la medida daba lo mismo con el escaparate puesto y sin el.
 raw = subprocess.run(
-    ["convert", p, "-crop", f"{cw}x{ch}+{x0}+{y0}", "+repage",
+    ["convert", p, "-gravity", "center", "-crop", "35%x35%+0+0", "+repage",
      "-colorspace", "Gray", "-depth", "8", "gray:-"],
     capture_output=True, check=True).stdout
 if not raw:
