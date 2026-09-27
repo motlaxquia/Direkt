@@ -18,6 +18,15 @@ SHELL := /bin/bash
 # y lo que interesa es la familia: darwin son los Mac y lo demas es Linux o
 # Windows. Se usa para enlazar con el OpenGL que toque y para nombrar el paquete.
 OS_DETECT := $(shell uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/^darwin$$/macos/')
+
+# Sistema para el que se empaqueta. Es el que dice el que manda, si lo hay
+# (DIREKT_OS=windows en Windows, porque ahi uname no vale), y si no el que
+# detecta uname.
+#
+# $(or ...) se queda vacio sin motivo aparente si no hay ningun argumento con
+# valor, y entonces el paquete sale con el nombre del sistema equivocado sin que
+# nada se queje. De ahi el "linux" de repuesto al final: siempre hay uno.
+OS_TARGET := $(or $(DIREKT_OS),$(OS_DETECT),linux)
 # .SHELLFLAGS es de GNU Make 4.0. El make de serie de macOS es el 3.81 y no lo
 # tiene, asi que en macOS hay que instalar make con brew; en MSYS2, pacman.
 .SHELLFLAGS := -eu -o pipefail -c
@@ -150,7 +159,9 @@ run-edit: edit
 # El portable es lo que se puede pasar a alguien: los tres binarios, los datos y
 # el fuente entero. El fuente va porque el binario es GPL (ver THIRD_PARTY.md),
 # y el tarball del motor tambien, para que se pueda recompilar sin red.
-PORTABLE := $(BUILD)/direkt-portable-$(OS_TARGET).tar.gz
+# El nombre del paquete sale solo, de OS_TARGET, en portable.sh. Aqui no hace
+# falta una variable para el: clean y distclean usan comodines, que asi cubren
+# los tres sistemas sin tener que enumerarlos.
 
 portable: engine game bsp edit
 	@echo "==> Paquete para $(OS_TARGET)"
