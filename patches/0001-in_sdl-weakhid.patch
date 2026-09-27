@@ -1,0 +1,44 @@
+--- a/Quake/in_sdl.c	2026-09-27 18:28:51.846902865 +0000
++++ b/Quake/in_sdl.c	2026-09-27 18:28:51.848902866 +0000
+@@ -233,12 +233,29 @@
+ 	return iohandle;
+ }
+ 
++// IOHIDGetAccelerationWithKey y IOHIDSetAccelerationWithKey declare el acelerador
++// del raton. En macOS sobre Apple Silicon (arm64) ya no existen en IOKit: solo
++// se pueden enlazar como simbolos debil, y si se enlazan fuerte el enlazado falla con
++//   Undefined symbols for architecture arm64: "_IOHIDGetAccelerationWithKey"
++// que es justo lo que hacia que este motor no se pudiera compilar en un Mac
++// moderno. weak_import hace que el enlace sea opcional y que en el ejecutable
++// valgan NULL si el sistema no los trae, que es el caso normal ya.
++extern kern_return_t IOHIDGetAccelerationWithKey(io_connect_t, CFStringRef, double *) __attribute__((weak_import));
++extern kern_return_t IOHIDSetAccelerationWithKey(io_connect_t, CFStringRef, double) __attribute__((weak_import));
++
+ static void IN_DisableOSXMouseAccel (void)
+ {
+ 	io_connect_t mouseDev = IN_GetIOHandle();
+ 	if (mouseDev != 0)
+ 	{
+-		if (IOHIDGetAccelerationWithKey(mouseDev, CFSTR(kIOHIDMouseAccelerationType), &originalMouseSpeed) == kIOReturnSuccess)
++		if (!IOHIDGetAccelerationWithKey || !IOHIDSetAccelerationWithKey)
++		{
++			// En arm64 el sistema no los trae. No es un fallo: simplemente no
++			// hay acelerador de raton que desactivar.
++			Cvar_Set("in_disablemacosxmouseaccel", "0");
++			Con_Printf("Mouse acceleration control is not available on this system; leaving it alone.\n");
++		}
++		else if (IOHIDGetAccelerationWithKey(mouseDev, CFSTR(kIOHIDMouseAccelerationType), &originalMouseSpeed) == kIOReturnSuccess)
+ 		{
+ 			if (IOHIDSetAccelerationWithKey(mouseDev, CFSTR(kIOHIDMouseAccelerationType), -1.0) != kIOReturnSuccess)
+ 			{
+@@ -265,7 +282,9 @@
+ 	io_connect_t mouseDev = IN_GetIOHandle();
+ 	if (mouseDev != 0)
+ 	{
+-		if (IOHIDSetAccelerationWithKey(mouseDev, CFSTR(kIOHIDMouseAccelerationType), originalMouseSpeed) != kIOReturnSuccess)
++		if (!IOHIDSetAccelerationWithKey)
++			; // Sin simbolos, no hay nada que restaurar. Ver IN_DisableOSXMouseAccel.
++		else if (IOHIDSetAccelerationWithKey(mouseDev, CFSTR(kIOHIDMouseAccelerationType), originalMouseSpeed) != kIOReturnSuccess)
+ 			Con_Printf("WARNING: Could not re-enable mouse acceleration (failed at IOHIDSetAccelerationWithKey).\n");
+ 		IOServiceClose(mouseDev);
+ 	}
