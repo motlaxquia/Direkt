@@ -1,0 +1,135 @@
+name: compilar
+
+# Se dispara solo en push a main y en pull requests. Los tres sistemas se
+# compilan siempre, no solo cuando cambian ficheros de uno de ellos: el fallo
+# que duele es el que aparece en el sistema que no tocas nunca.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Las tres dependencias externas van fijadas por SHA, asi que esto solo dice
+  # de donde sepillar, no que se fien de lo que haya ahi.
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  linux:
+    name: linux (ubuntu, pruebas completas)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencias del sistema
+        run: scripts/setup-deps.sh
+
+      - name: Motor
+        run: make engine
+
+      - name: Generador, editor y datos
+        run: make bsp edit data
+
+      - name: Todas las pruebas
+        run: make test
+
+      - name: Paquete
+        run: make portable
+
+      - name: Adjuntar a la release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/direkt-portable-linux.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: direkt-portable-linux
+          path: build/direkt-portable-linux.tar.gz
+
+  macos:
+    name: macos (sin ventana)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # Homebrew ya viene en el runner. El make de serie es el 3.81, que no
+      # entiende de .SHELLFLAGS, asi que se instala el de brew.
+      - name: Dependencias
+        run: |
+          brew install make cmake pkg-config sdl2 fteqcc
+
+      - name: Motor
+        run: make engine
+
+      - name: Generador, editor y datos
+        run: make bsp edit data
+
+      # En macOS no hay Xvfb ni forma de tener un contexto de GL sin sesion
+      # grafica, asi que aqui no se prueba el arranque del motor: se prueba
+      # todo lo que no necesita ventana. El arranque se prueba en linux.
+      - name: Pruebas que no necesitan ventana
+        run: make bsp-test editor-test
+
+      - name: Paquete
+        run: make portable DIREKT_OS=macos
+
+      - name: Adjuntar a la release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/direkt-portable-macos.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: direkt-portable-macos
+          path: build/direkt-portable-macos.tar.gz
+
+  windows:
+    name: windows (msys2/mingw)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      # En Windows no hay ni make ni gcc de serie. MSYS2 los trae y ademas da
+      # bash, que es lo que necesitan los scripts del repo.
+      - name: Dependencias
+        run: |
+          pacman -Syu --noconfirm --needed \
+            mingw-w64-x86_64-gcc \
+            mingw-w64-x86_64-make \
+            mingw-w64-x86_64-cmake \
+            mingw-w64-x86_64-pkg-config \
+            mingw-w64-x86_64-SDL2 \
+            mingw-w64-x86_64-fteqcc \
+            zip
+
+      - name: Motor
+        run: make engine
+
+      - name: Generador, editor y datos
+        run: make bsp edit data
+
+      - name: Pruebas que no necesitan ventana
+        run: make bsp-test editor-test
+
+      - name: Paquete
+        run: make portable DIREKT_OS=windows
+
+      - name: Adjuntar a la release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/direkt-portable-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: direkt-portable-windows
+          path: build/direkt-portable-windows.zip

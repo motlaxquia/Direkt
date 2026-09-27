@@ -11,14 +11,19 @@ Licencia: **GPL-2.0**. Ver [`LICENSE`](LICENSE) y
 
 ## Descarga
 
-**[⬇ direkt-portable.tar.gz](https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable.tar.gz)** — 127 MB · Linux x86-64
+| Sistema | Paquete | Lanzador |
+|---|---|---|
+| Linux | [⬇ direkt-portable-linux.tar.gz](https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-linux.tar.gz) — 127 MB | `./direkt.sh` |
+| macOS | [⬇ direkt-portable-macos.tar.gz](https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-macos.tar.gz) — 127 MB | doble clic en `direkt.command` |
+| Windows | [⬇ direkt-portable-windows.zip](https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-windows.zip) — 127 MB | doble clic en `direkt.bat` |
 
 Paquete portable con los binarios ya compilados, los datos y el fuente entero,
-que es lo que obliga la GPL.
+que es lo que obliga la GPL. Los tres se compilan solos en
+[`.github/workflows/build.yml`](.github/workflows/build.yml).
 
 ```sh
-tar xzf direkt-portable.tar.gz
-cd direkt-portable
+tar xzf direkt-portable-linux.tar.gz
+cd direkt-portable-linux
 ./direkt.sh            # jugar
 ```
 
@@ -28,7 +33,17 @@ cd direkt-portable
 SHA-256 del paquete:
 
 ```
-09dd71f56f7ade18f85e490bc60637d6e6f4f6726adc625b76d4cb19db60d8a6  direkt-portable.tar.gz
+60f3f8c8ee564fce5b4f986847125f41a100901092f19f719ca6f79d3078d9d1  direkt-portable-linux.tar.gz
+```
+
+**El motor pide OpenGL 4.3**, porque dibuja el mundo con *compute shaders*. En
+Linux el lanzador lo comprueba antes de arrancar y, si el OpenGL de la máquina
+no llega, cae solo al rasterizador por software de Mesa (`llvmpipe`). Se puede
+forzar en los dos sentidos:
+
+```sh
+DIREKT_SOFTWARE_GL=1 ./direkt.sh    # ir siempre por software
+DIREKT_FORCE_GL=1 ./direkt.sh       # no tocar el GL, pase lo que pase
 ```
 
 En una máquina sin tarjeta gráfica hace falta Mesa, que va por software:
@@ -36,6 +51,10 @@ En una máquina sin tarjeta gráfica hace falta Mesa, que va por software:
 ```sh
 sudo apt install libsdl2-2.0-0 libgl1 libgl1-mesa-dri xvfb
 ```
+
+**En macOS el motor probablemente no arrancará**: el OpenGL del sistema llega
+como mucho a 4.1 y no hay forma de subirlo. El generador de mapas y el editor sí
+que funcionan. Cada paquete lleva un `LEE-ME-ENTORNO.md` con los detalles.
 
 ## Qué hay aquí
 

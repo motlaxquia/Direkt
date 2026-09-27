@@ -8,10 +8,13 @@
 #   make run-headless   ejecuta el juego sin pantalla (Xvfb + software GL)
 #   make shot MAP=e1m1  arranca, juega un rato y guarda una captura
 #   make test      smoke test headless completo
-#   make portable  empaqueta en build/direkt-portable.tar.gz (binarios + datos + fuente)
+#   make portable  empaqueta para el sistema en el que se ejecuta (binarios + datos + fuente)
+#                   DIREKT_OS=macos|windows|linux fuerza otro destino
 #   make clean / distclean
 
 SHELL := /bin/bash
+# .SHELLFLAGS es de GNU Make 4.0. El make de serie de macOS es el 3.81 y no lo
+# tiene, asi que en macOS hay que instalar make con brew; en MSYS2, pacman.
 .SHELLFLAGS := -eu -o pipefail -c
 .DEFAULT_GOAL := help
 
@@ -55,7 +58,7 @@ help:
 	@echo "editor:   make edit        compila el editor de niveles"
 	@echo "          make editor-test  prueba el editor y dibuja un fotograma"
 	@echo "          make run-edit     abre el editor (MAPFILE=mapa.map)"
-	@echo "paquete:  make portable     .tar.gz con binarios, datos y fuente"
+	@echo "paquete:  make portable     .tar.gz (o .zip en Windows) con binarios, datos y fuente"
 
 setup:
 	@$(REPO)/scripts/setup-deps.sh
@@ -128,10 +131,16 @@ run-edit: edit
 # El portable es lo que se puede pasar a alguien: los tres binarios, los datos y
 # el fuente entero. El fuente va porque el binario es GPL (ver THIRD_PARTY.md),
 # y el tarball del motor tambien, para que se pueda recompilar sin red.
-PORTABLE := $(BUILD)/direkt-portable.tar.gz
+# El paquete lleva el nombre del sistema destino, porque hay tres y la pagina
+# web tiene que poder ofrecer el de cada uno. En Linux sale .tar.gz y en Windows
+# .zip, que es lo que abre el explorador de archivos sin preguntar nada.
+OS_DETECT := $(shell uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/^darwin$$/macos/')
+OS_TARGET := $(or $(DIREKT_OS),$(OS_DETECT),linux)
+PORTABLE := $(BUILD)/direkt-portable-$(OS_TARGET).tar.gz
 
 portable: engine game bsp edit
-	@$(REPO)/scripts/portable.sh
+	@echo "==> Paquete para $(OS_TARGET)"
+	@DIREKT_OS=$(OS_TARGET) $(REPO)/scripts/portable.sh
 
 shot: game
 	@$(REPO)/scripts/run-headless.sh --map $(MAP) --settle $(SETTLE) --min-lit $(MIN_LIT) --shot
@@ -200,7 +209,8 @@ editor-test: $(EDIT_BIN)
 # espacio. El .tar.gz tambien se va: se regenera en un momento.
 clean:
 	@rm -rf $(BUILD)/engine-build $(BIN) $(GAME_PROGS) $(GAME_PROGS_NS) \
-		$(BUILD)/logs $(BUILD)/shots $(BUILD)/portable $(PORTABLE)
+		$(BUILD)/logs $(BUILD)/shots $(BUILD)/portable
+		$(wildcard $(BUILD)/direkt-portable-*.tar.gz) $(wildcard $(BUILD)/direkt-portable-*.zip)
 	@echo "limpio"
 
 engine-clean:
