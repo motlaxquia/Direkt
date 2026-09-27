@@ -183,10 +183,16 @@ BSP_MAP   ?= $(REPO)/src/test/habitacion.map
 EDIT_SRC  := $(addprefix $(REPO)/src/,$(CORE_SRC) ed_doc.c ed_view.c ed_gui.c \
                               edtex.c ed_test.c ed_main.c)
 EDIT_HDR  := editor.h ed_view.h ed_gui.h edtex.h
-# -lGL solo existe en Linux y en Windows con MinGW. En macOS el OpenGL es un
-# framework del sistema y se enlaza con -framework OpenGL.
+# El OpenGL se enlaza de tres maneras distintas segun el sistema, y equivocarse
+# aqui es un "cannot find -lGL" en cuanto se compila fuera de Linux:
+#   Linux    -lGL       (el de Mesa)
+#   Windows  -lopengl32 (MinGW no tiene libGL; lo que hay es el opengl32 del
+#                       propio Windows, que trae mingw-w64-x86_64-mesa)
+#   macOS    -framework OpenGL  (los frameworks del sistema no son -l)
 ifeq ($(OS_DETECT),macos)
 EDIT_GL := -framework OpenGL -framework Cocoa
+else ifneq (,$(findstring mingw,$(OS_DETECT)))
+EDIT_GL := -lopengl32
 else
 EDIT_GL := -lGL
 endif
