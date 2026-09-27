@@ -23,7 +23,11 @@ __pycache__/
 *.pyc
 
 # Logica de juego compilada: se genera con 'make game'
-direkt/progs.dat
+# progs.dat SI se versiona a proposito: es bytecode independiente de la
+# plataforma, y sin el el motor no tiene logica de juego. Versionarlo deja al
+# generador y al editor funcionando sin fteqcc, que en macOS y en Windows no
+# esta en ningun gestor de paquetes. Cuando fteqcc esta disponible, make game lo
+# vuelve a compilar igual.
 direkt/progs.lno
 game/progs.lno
 game/progs.dat
