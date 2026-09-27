@@ -76,7 +76,7 @@ mkdir -p "$STAGE/bin" "$STAGE/direkt"
 cp "$BIN/ironwail" "$BIN/direkt-bsp" "$BIN/direkt-edit" "$STAGE/bin/"
 # En Windows los .exe necesitan las DLL de MINGW64 en la misma carpeta, o no
 # arrancan. En Linux y macOS esto no hace nada.
-"$REPO/scripts/copy-runtime-dlls.sh" >/dev/null 2>&1 || true
+"$REPO/scripts/copy-runtime-dlls.sh" || true
 # Las DLL que se hayan copiado en build/bin, al paquete. En los otros sistemas
 # no hay ninguna, y el glob no casa con nada.
 for dll in "$BIN"/*.dll "$BIN"/*.DLL; do
