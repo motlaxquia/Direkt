@@ -6,8 +6,11 @@
 #define _GNU_SOURCE
 #include "direktbsp.h"
 
+#include <errno.h>
 #include <math.h>
 #include <stdint.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -398,26 +401,31 @@ int temp_file(char *buf, size_t n, const char *tag)
 	static unsigned counter;
 	FILE *f;
 	int intento;
+	int last_errno = 0;
 
-	/* El directorio temporal cambia de nombre segun el sistema: TMPDIR en
-	 * Unix, TEMP y TMP en Windows, y P_tmpdir como ultimo recurso. */
-	env = getenv("TMPDIR");
-	if (env && *env)
-		dir = env;
-#ifdef P_tmpdir
-	if (!dir) {
-		env = getenv("TEMP");
-		if (env && *env)
+	/* El directorio temporal se llama distinto segun el sistema: TMPDIR en
+	 * Unix, TEMP y TMP en Windows. Los tres se miran siempre, en cualquier
+	 * sistema: son llamadas a getenv y no pasa nada si no existen.
+	 *
+	 * Se prueban en orden y se va con el primero que exista de verdad. Antes de
+	 * usar el que aparezca en el entorno, se comprueba con stat que sea un
+	 * directorio: en Windows la variable suele estar puesta pero en maquinas
+	 * raras apunta a algo que no existe, y fopen ahi falla sin motivo claro. */
+	static const char *const dirs[] = {"TMPDIR", "TEMP", "TMP"};
+	struct stat st;
+	size_t i;
+
+	for (i = 0; i < sizeof(dirs) / sizeof(dirs[0]); i++) {
+		env = getenv(dirs[i]);
+		if (env && *env && stat(env, &st) == 0 && S_ISDIR(st.st_mode))
 			dir = env;
-		env = getenv("TMP");
-		if (env && *env)
-			dir = env;
-		dir = P_tmpdir;
 	}
+#ifdef P_tmpdir
+	if (!dir && stat(P_tmpdir, &st) == 0 && S_ISDIR(st.st_mode))
+		dir = P_tmpdir;
 #endif
-	if (!dir || !*dir)
+	if (!dir)
 		dir = ".";
-
 	/* Se prueban varios porque el nombre puede existir ya, aunque lo normal es
 	 * que el pid bastara. */
 	for (intento = 0; intento < 64; intento++) {
@@ -428,6 +436,11 @@ int temp_file(char *buf, size_t n, const char *tag)
 			fclose(f);
 			return 1;
 		}
+		last_errno = errno;
 	}
+	/* Se deja dicho por que, que un temporal que no se puede crear sin
+	 * explicación es un fallo que no se puede arreglar a ciegas. */
+	fprintf(stderr, "temp_file: no se pudo crear nada en '%s': %s\n",
+	        dir, strerror(last_errno));
 	return 0;
 }
