@@ -378,7 +378,23 @@ const char *entity_key(entity_t *e, const char *key)
 map_t *parse_map(const char *filename)
 {
 	char *buf = read_whole_file(filename);
-	char *p = buf;
+	map_t *map = parse_map_text(buf);
+	free(buf);
+	return map;
+}
+
+/* Igual que parse_map, pero desde el texto en memoria.
+ *
+ * Esto existia ya de otra manera: el editor, al recargar un documento, escribia
+ * el texto en un temporal de /tmp y lo volvia a leer. En Windows no hay /tmp y
+ * mkstemp no esta, asi que ahi reventaba. Y de paso se ahorraba la escritura:
+ * here no hay nada que escribir.
+ *
+ * El texto se recorre pero no se modifica ni se libera.
+ */
+map_t *parse_map_text(const char *text)
+{
+	char *p = (char *)text;
 	map_t *map = xcalloc(1, sizeof(map_t));
 
 	for (;;) {
@@ -442,7 +458,6 @@ map_t *parse_map(const char *filename)
 		}
 	}
 
-	free(buf);
 	return map;
 }
 

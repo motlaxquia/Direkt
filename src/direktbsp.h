@@ -192,6 +192,7 @@ typedef struct {
 } map_t;
 
 map_t *parse_map(const char *filename);
+map_t *parse_map_text(const char *text);
 void free_map(map_t *map);
 const char *entity_key(entity_t *e, const char *key);
 
