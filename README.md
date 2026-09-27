@@ -48,6 +48,125 @@ make run-headless              # arranca, captura y se apaga
 make shot MAP=lq_e1m1          # captura de otro mapa
 ```
 
+## Mapas propios: `direkt-bsp`
+
+Ni Ironwail ni LibreQuake traen compilador de mapas, y LibreQuake no
+distribuye los `.map` originales. Para tener niveles propios hay que escribir
+el `.bsp` desde cero, y eso es lo que hace `direkt-bsp`:
+
+```sh
+make bsp                                    # compila el generador
+build/bin/direkt-bsp src/test/habitacion.map build/lq/full/id1/maps/nuevo.bsp
+build/bin/direkt-bsp --check build/lq/full/id1/maps/nuevo.bsp
+make bsp-test                               # la prueba completa
+```
+
+Cubre el subconjunto clásico de `.map` (caras planas, el de los mapas de
+LibreQuake); los *brush primitives* (`[ ... ]`) se rechazan con un error
+claro. Escribe los 15 lumps de un BSP29, incluidas las **tres dilataciones de
+colisión**: el jugador no se cae al suelo.
+
+`--check` no es opcional. El motor **no valida ni un `fileofs`**: un error ahí
+no da un fallo, da una lectura arbitraria de memoria a mitad de una partida. El
+validador revisa el fichero ya escrito en disco (offsets, tamaños, índices,
+ciclos y nodos inalcanzables), no la estructura en memoria.
+
+Todavía **no** hace: texturas, iluminación, visibilidad, entidades
+brush que se mueven ni submodelos. Los lumps `TEXTURES`, `VISIBILITY` y
+`LIGHTING` salen vacíos, así que se ve la geometría pero sin material ni luz.
+
+## El editor: `direkt-edit`
+
+Un mapa propio se coloca mucho mejor con un editor que editando el `.map` a
+mano, así que el editor abre, dibuja, modifica y guarda:
+
+```sh
+make edit                              # compila (necesita libsdl2-dev)
+make run-edit MAPFILE=src/test/habitacion.map
+build/bin/direkt-edit --new            # mapa en blanco
+build/bin/direkt-edit --selftest       # 40 pruebas, sin ventana
+make editor-test                       # prueba completa, con captura
+```
+
+Ironwail ya usaba SDL2, así que el editor **no añade ninguna dependencia
+nueva** al tarball. El dibujo es OpenGL 1.2 en modo inmediato, que es lo que
+hay en cualquier Linux y lo que ya usa el motor.
+
+### Atajos
+
+| Tecla | Qué hace |
+|---|---|
+| ratón izquierdo | selecciona la brush que se ve debajo |
+| ratón izquierdo + arrastrar | mueve la brush, o estira la cara pulsada |
+| ratón derecho | mira (el cursor se esconde) |
+| `W` `A` `S` `D`, flechas | mueve la cámara; `C` centra en lo seleccionado |
+| `B` | caja nueva delante de la cámara, en la rejilla |
+| `D` | duplica la brush |
+| `Supr` / `Retroceso` | borra la brush |
+| flechas | mueven la brush seleccionada un paso de rejilla |
+| `Ctrl+Z` / `Ctrl+Y` | deshacer / rehacer |
+| `G` | dobla la rejilla (hasta 128) |
+| `1`-`9` | elige textura |
+| `F2` | guarda |
+| `F5` | compila a `.bsp` y lo valida |
+| `Tab` | alterna alambre y sólido |
+| `F1` | muestra u oculta la ayuda |
+
+### Cómo está repartido
+
+| Fichero | De qué se ocupa |
+|---|---|
+| `src/ed_doc.c` | el documento: selección, edición, historial, guardado a `.map` |
+| `src/ed_view.c` | cámara, matrices y rayo de ratón |
+| `src/ed_gui.c` | ventana de SDL2 y dibujado con OpenGL |
+| `src/ed_test.c` | 40 pruebas de la lógica, sin pantalla |
+
+`ed_doc` y `ed_view` no saben nada de SDL ni de OpenGL, así que casi todo se
+puede comprobar en un banco de pruebas sin ventana. Solo `ed_gui` toca la
+biblioteca gráfica, y aun así tiene un modo `--shot` que dibuja un fotograma a
+un PPM, que es como se prueba el dibujo.
+
+### Decisiones que no son obvias
+
+**El documento ES un `map_t`.** No hay una representación paralela: lo que se
+ve es lo que se compila, y `save_map` escribe exactamente lo que hay. Un editor
+con dos representaciones del mapa siempre acaba con una de las dos desfasada.
+
+**El historial son instantáneas del `.map` en texto.** Un editor de niveles hace
+tan pocas operaciones por minuto que serializar el documento entero para cada
+cambio sale más barato que cualquier estructura de deshacer incremental, y
+sobre todo no se puede desincronizar: lo que se deshace es literalmente lo que
+había.
+
+**El parser acepta los puntos con y sin espacios dentro del paréntesis.**
+`( 0 0 0 )` y `(0 0 0)` valen los dos, porque las dos formas se ven en el
+mundo. Con solo una, el editor no puede abrir mapas que haya hecho otra
+herramienta, y tampoco leer los suyos propios.
+
+**Una brush-entity se guarda siempre con `"origin"`.** Las brushes de
+LibreQuake llegan al BSP con `"model" "*N"` y sin `"origin"`, y el motor **no lo
+deduce**: usa el origen de la entidad, que es (0,0,0). Por eso el origen se
+reescribe siempre desde la caja de las brushes, que es lo único que no depende
+de dónde esté el cursor. Es el fallo que hacía que las plataformas apareciesen
+en el centro del mapa.
+
+**Arrastrar la cara de una caja la estira; la de otra brush, la deforma.**
+En una caja los cuatro vértices de una cara los comparten con las cuatro
+lateral, así que hay que mover **todos los puntos que están en ese plano**. Si
+se mueven solo los de la cara, las laterales siguen apuntando a la coordenada
+antigua y el resultado no es una caja más pequeña: es un tronco de pirámide con
+las juntas abiertas. En una brush que ya no es caja, arrastrar una cara sí la
+deforma, que es lo único que se puede hacer sin romper la convexidad.
+
+**`winding_reverse` devuelve una winding nueva.** No da la vuelta la de dentro.
+Ignorar el valor de retorno deja las caras con la normal invertida y el brush se
+comporta al revés, sin ningún aviso.
+
+**El HUD dibuja el texto desde arriba hacia abajo en un eje y que crece hacia
+arriba.** El panel y las barras se colocan a partir de la altura de la ventana.
+Con blending: sin `glEnable(GL_BLEND)`, el `glColor4f` con alfa se dibuja negro
+opaco y tapa la escena.
+
 ## Estado actual
 
 El juego todavía **no es jugable**. Es un arranque verificado de punta a punta:
@@ -55,6 +174,9 @@ El juego todavía **no es jugable**. Es un arranque verificado de punta a punta:
 - `progs.dat` propio compilado con `fteqcc` y cargado por Ironwail sobre los
   datos de LibreQuake.
 - Cycle of vida del cliente (`client.qc`), suficiente para entrar al mundo.
+- Generador de `.bsp` propio (`direkt-bsp`): compila `.map` a BSP29 con las tres
+  dilataciones de colisión, y el motor carga el resultado y se juega: el
+  jugador se apoya en el suelo, anda y lo paran los muros.
 - `entities.qc` da función de spawn a las entidades de los mapas, de modo que
   ningún mapa se rompe con `No spawn function`. Las que aún no están
   implementadas (monstruos, ...) avisan una vez y se retiran.

@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Direkt — descarga</title>
+<meta name="description" content="Direkt: motor de nivel tipo Quake con generador de .bsp propio y editor de niveles. Descarga portable para Linux.">
+<meta name="color-scheme" content="light">
+<style>
+/* ------------------------------------------------------------------
+   Todo en blanco y negro. Ni un color, ni una fuente externa: la pagina
+   tiene que verse igual dentro de tres anos, sin depender de un CDN ni de
+   que este vivo. Times New Roman es una fuente del sistema, asi que no
+   hay nada que descargar.
+   ------------------------------------------------------------------ */
+
+:root{
+  --tinta:   #000;
+  --papel:   #fff;
+  --gris:    rgba(0,0,0,.62);
+  --gris-2:  rgba(0,0,0,.42);
+  --pico:    5deg;   /* punta de la estrella */
+  --pico-g:  10deg;  /* una punta y su hueco */
+  --mordida: 13px;   /* grosor del borde de dientes */
+}
+
+*{box-sizing:border-box}
+
+html{-webkit-text-size-adjust:100%}
+
+body{
+  margin:0;
+  background:var(--papel);
+  color:var(--tinta);
+  font-family:"Times New Roman", Times, "Liberation Serif", "Nimbus Roman", serif;
+  font-size:18px;
+  line-height:1.6;
+  text-rendering:optimizeLegibility;
+}
+
+/* Una rejilla de fondo muy tenue, como papel de cuadricula. Va en puntos, no
+   en lineas, para que no compita con el texto. */
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  background-image:radial-gradient(rgba(0,0,0,.16) 1px, transparent 1px);
+  background-size:26px 26px;
+  opacity:.5;
+  pointer-events:none;
+  z-index:0;
+}
+
+.envoltorio{position:relative; z-index:1}
+
+.envolt{
+  max-width:60rem;
+  margin:0 auto;
+  padding:3.5rem 1.5rem 5rem;
+}
+
+/* ------------------------------------------------------------------
+   El motivo: cuadros de bordes puntiagudos.
+   El borde es un conic-gradient repetido, que desde el centro saca dientes
+   triangulares. El contenido va dentro de un recuadro blanco, asi que los
+   dientes quedan solo en el marco y el texto nunca se recorta.
+   ------------------------------------------------------------------ */
+.dientes{
+  --pin: var(--mordida);
+  --pico: 5deg;
+  --pico-g: 10deg;
+  padding:var(--pin);
+  background:repeating-conic-gradient(from 0deg at 50% 50%,
+              var(--tinta) 0 var(--pico), var(--papel) var(--pico) var(--pico-g));
+}
+.dientes > .dentro{
+  background:var(--papel);
+  height:100%;
+}
+
+/* Los dientes grandes, para el boton de descarga. */
+.dientes--grande{--pin:18px; --pico:3.2deg; --pico-g:6.4deg}
+.dientes--fino  {--pin:9px;  --pico:6deg;   --pico-g:12deg}
+
+/* Al pasar el raton, el marco se invierte. Es el unico adorno de la pagina y
+   hace falta uno: dice que eso se puede pulsar. */
+.enlace-dientes{
+  display:block;
+  text-decoration:none;
+  color:inherit;
+  transition:none;
+}
+.enlace-dientes:hover .dentro,
+.enlace-dientes:focus-visible .dentro{background:var(--tinta); color:var(--papel)}
+.enlace-dientes:hover{outline:3px solid var(--tinta); outline-offset:4px}
+.enlace-dientes:focus-visible{outline:3px solid var(--tinta); outline-offset:4px}
+
+/* ------------------------------------------------------------------ */
+
+h1,h2,h3{line-height:1.12; margin:0; font-weight:400}
+
+h1{
+  font-size:clamp(3.2rem, 11vw, 7.5rem);
+  letter-spacing:-.02em;
+  margin:.15em 0 0;
+}
+h1 .bajo{
+  display:block;
+  font-size:clamp(.9rem, 2.2vw, 1.15rem);
+  letter-spacing:.42em;
+  text-transform:uppercase;
+  color:var(--gris-2);
+  margin-top:1.4em;
+}
+
+h2{
+  font-size:clamp(1.5rem, 3.4vw, 2.15rem);
+  letter-spacing:.01em;
+  margin-bottom:.7em;
+}
+h3{font-size:1.15rem; margin-bottom:.35em}
+
+p{margin:0 0 1.1em}
+p:last-child{margin-bottom:0}
+
+a{color:var(--tinta); text-decoration-thickness:1px; text-underline-offset:.22em}
+
+/* El codigo en linea se queda en la misma familia que el texto: la pagina es
+   una sola tipografia. Solo los bloques de comandos usan monoespaciada, que ahi
+   si ayuda a leerlos. */
+code{
+  font-family:"Times New Roman", Times, serif;
+  font-size:.92em;
+  background:rgba(0,0,0,.07);
+  padding:.08em .34em;
+  white-space:nowrap;
+}
+pre code{background:none; padding:0; font-size:1em}
+a:hover{text-decoration-thickness:2px}
+
+.entradilla{
+  font-size:clamp(1.15rem, 2.6vw, 1.5rem);
+  max-width:34ch;
+  color:var(--gris);
+  margin:1.6rem 0 0;
+}
+
+.regla{border:0; border-top:3px solid var(--tinta); margin:0}
+
+.seccion{margin-top:4.5rem}
+
+.rotulo{
+  font-size:.74rem;
+  letter-spacing:.34em;
+  text-transform:uppercase;
+  color:var(--gris-2);
+  margin:0 0 .9rem;
+}
+
+/* --- la descarga --------------------------------------------------- */
+
+.carta{
+  display:grid;
+  gap:1.6rem;
+  grid-template-columns:1fr;
+  align-items:start;
+}
+
+.boton{
+  text-align:center;
+  padding:1.5rem 1.25rem;
+  cursor:pointer;
+}
+.boton .grito{
+  font-size:clamp(1.4rem, 4.2vw, 2.2rem);
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  display:block;
+}
+.boton .fichero{
+  display:block;
+  margin-top:.7em;
+  font-size:.95rem;
+  color:var(--gris);
+}
+.enlace-dientes:hover .boton .fichero,
+.enlace-dientes:focus-visible .boton .fichero{color:rgba(255,255,255,.7)}
+
+.datos{
+  display:grid;
+  grid-template-columns:auto 1fr;
+  gap:.35rem 1.4rem;
+  font-size:.95rem;
+  margin:0;
+  align-content:start;
+}
+.datos dt{color:var(--gris-2); text-transform:uppercase; letter-spacing:.16em; font-size:.72rem; align-self:center}
+.datos dd{margin:0; overflow-wrap:anywhere}
+
+.aviso{
+  border-left:5px solid var(--tinta);
+  padding:.2em 0 .2em 1.1rem;
+  color:var(--gris);
+  font-size:.95rem;
+  margin:1.4rem 0 0;
+}
+
+/* --- pasos --------------------------------------------------------- */
+
+.pasos{
+  display:grid;
+  gap:1.4rem;
+  grid-template-columns:repeat(auto-fit, minmax(13rem, 1fr));
+}
+.paso{padding:1.1rem 1.2rem 1.25rem}
+.paso .n{
+  font-size:2.6rem;
+  line-height:1;
+  display:block;
+  margin-bottom:.15em;
+}
+.paso pre{
+  margin:.6em 0 0;
+  font-family:inherit;
+  font-size:.9rem;
+  background:transparent;
+  border:1px solid var(--tinta);
+  padding:.5em .7em;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+
+/* --- listas -------------------------------------------------------- */
+
+.dos-columnas{
+  display:grid;
+  gap:1.6rem 3rem;
+  grid-template-columns:repeat(auto-fit, minmax(17rem, 1fr));
+}
+ul.lista{margin:0; padding:0; list-style:none}
+ul.lista li{
+  padding:.5em 0 .5em 1.5em;
+  border-bottom:1px solid rgba(0,0,0,.18);
+  position:relative;
+}
+ul.lista li::before{
+  content:"";
+  position:absolute;
+  left:.1em; top:1.05em;
+  width:.5em; height:.5em;
+  background:var(--tinta);
+  transform:rotate(45deg);
+}
+
+/* --- pie ----------------------------------------------------------- */
+
+.pie{
+  margin-top:5rem;
+  padding-top:1.4rem;
+  border-top:3px solid var(--tinta);
+  display:grid;
+  gap:1rem 3rem;
+  grid-template-columns:repeat(auto-fit, minmax(15rem, 1fr));
+  font-size:.92rem;
+  color:var(--gris);
+}
+.pie b{color:var(--tinta); font-weight:400}
+
+.hash{
+  font-size:.82rem;
+  overflow-wrap:anywhere;
+  line-height:1.5;
+  border:1px dashed rgba(0,0,0,.4);
+  padding:.7em .9em;
+  margin:0;
+}
+
+@media (min-width:52rem){
+  .carta{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}
+  .carta > .enlace-dientes{align-self:stretch}
+}
+
+/* Sin animaciones: la pagina no se mueve, se lee. */
+@media (prefers-reduced-motion: reduce){
+  *{transition:none !important; animation:none !important}
+}
+
+@media print{
+  body::before{display:none}
+  .boton{background:var(--papel) !important}
+  .enlace-dientes .dentro{background:var(--papel) !important; color:var(--tinta) !important}
+}
+</style>
+</head>
+<body>
+<div class="envoltorio">
+<div class="envolt">
+
+  <header>
+    <p class="rotulo">Motor de nivel tipo Quake</p>
+    <h1>Direkt<span class="bajo">Descarga</span></h1>
+    <p class="entradilla">
+      Paquete portable para Linux: el motor, un generador de <code>.bsp</code>
+      propio y un editor de niveles. Sin compilar nada.
+    </p>
+  </header>
+
+  <hr class="regla" style="margin-top:2.6rem">
+
+  <!-- ================= DESCARGA ================= -->
+  <section class="seccion" aria-labelledby="t-descarga">
+    <h2 id="t-descarga">Descarga</h2>
+
+    <div class="carta">
+      <!--
+        La unica cosa que hay que cambiar para publicar otra version es esta
+        URL. Con "releases/latest" la pagina no hay que tocarla en cada
+        version nueva: el enlace apunta siempre a la mas reciente.
+      -->
+      <a class="enlace-dientes dientes dientes--grande" id="descarga"
+         href="https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable.tar.gz"
+         download>
+        <span class="dentro">
+          <span class="boton">
+            <span class="grito">Bajar</span>
+            <span class="fichero">direkt-portable.tar.gz &middot; 127 MB</span>
+          </span>
+        </span>
+      </a>
+
+      <div>
+        <dl class="datos">
+          <dt>Version</dt><dd>27-09-2026</dd>
+          <dt>Tamano</dt><dd>133 099 467 bytes (126,9 MiB)</dd>
+          <dt>Motor</dt><dd>Ironwail 08d5781</dd>
+          <dt>Datos</dt><dd>LibreQuake (pak0.pak + pak1.pak)</dd>
+          <dt>Sistema</dt><dd>Linux x86-64</dd>
+          <dt>Licencia</dt><dd>GPL-2.0</dd>
+        </dl>
+        <p class="aviso">
+          Son 127 MB porque van dentro los datos de LibreQuake y el codigo
+          fuente entero, que la licencia oblige. El <code>.bsp</code> de un mapa
+          tuyo lo genera el propio paquete en un segundo.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PASOS ================= -->
+  <section class="seccion" aria-labelledby="t-pasos">
+    <h2 id="t-pasos">Como se usa</h2>
+    <div class="pasos">
+
+      <div class="dientes dientes--fino paso">
+        <span class="dentro">
+          <span class="n">1</span>
+          <h3>Descomprime</h3>
+          <pre>tar xzf direkt-portable.tar.gz
+cd direkt-portable</pre>
+        </span>
+      </div>
+
+      <div class="dientes dientes--fino paso">
+        <span class="dentro">
+          <span class="n">2</span>
+          <h3>Juega</h3>
+          <pre>./direkt.sh</pre>
+        </span>
+      </div>
+
+      <div class="dientes dientes--fino paso">
+        <span class="dentro">
+          <span class="n">3</span>
+          <h3>Compila un mapa</h3>
+          <pre>./direkt.sh bsp mapa.map salida.bsp</pre>
+        </span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= CONTENIDO ================= -->
+  <section class="seccion" aria-labelledby="t-que">
+    <h2 id="t-que">Que lleva</h2>
+    <div class="dos-columnas">
+      <ul class="lista">
+        <li><b>ironwail</b> — el motor, compilado</li>
+        <li><b>direkt-bsp</b> — generador de .bsp: lee .map y escribe el BSP de Quake con texturas y luz</li>
+        <li><b>direkt-edit</b> — editor de niveles con picking, arrastre de caras e historial</li>
+        <li><b>progs.dat</b> — la logica de juego</li>
+        <li><b>datos/</b> — LibreQuake completo</li>
+      </ul>
+      <ul class="lista">
+        <li><b>fuente/</b> — todo el codigo, porque el binario es GPL</li>
+        <li><b>fuente/cache/</b> — el tarball del motor con su SHA-256, para recompilar sin red</li>
+        <li><b>docs/</b> — la documentacion de formatos y de las trampas del motor</li>
+        <li><b>Makefile</b> — por si prefieres reconstruirlo todo</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= REQUISITOS ================= -->
+  <section class="seccion" aria-labelledby="t-req">
+    <h2 id="t-req">Lo que hace falta en tu equipo</h2>
+    <p>Nada que compilar. Solo esto:</p>
+    <ul class="lista">
+      <li><b>SDL2</b> y <b>OpenGL</b> (<code>libsdl2-2.0-0</code>, <code>libgl1</code>)</li>
+      <li>Para jugar sin tarjeta grafica: <b>Mesa</b> (<code>libgl1-mesa-dri</code>), que va por software</li>
+      <li>Opcional: <code>xvfb</code> para la comprobacion automatica, <code>imagemagick</code> para las capturas</li>
+    </ul>
+    <p class="aviso">
+      En Debian y Ubuntu:
+      <code>sudo apt install libsdl2-2.0-0 libgl1 libgl1-mesa-dri xvfb</code>
+    </p>
+  </section>
+
+  <!-- ================= VERIFICAR ================= -->
+  <section class="seccion" aria-labelledby="t-hash">
+    <h2 id="t-hash">Comprobar que no te ha llegado a medias</h2>
+    <p>
+      Un fichero de 127 MB se puede cortar por el camino. El hash SHA-256
+      sale impreso en cuanto se acaba de bajar:
+    </p>
+    <pre class="hash">09dd71f56f7ade18f85e490bc60637d6e6f4f6726adc625b76d4cb19db60d8a6  direkt-portable.tar.gz</pre>
+    <p style="margin-top:1.1rem">
+      Y se comprueba con <code>sha256sum -c</code>, que tiene que responder
+      <code>OK</code>:
+    </p>
+  </section>
+
+  <!-- ================= COMANDOS ================= -->
+  <section class="seccion" aria-labelledby="t-cmd">
+    <h2 id="t-cmd">Todos los comandos</h2>
+    <div class="dos-columnas">
+      <ul class="lista">
+        <li><code>./direkt.sh</code> — jugar</li>
+        <li><code>./direkt.sh test</code> — comprobar que el paquete arranca de verdad</li>
+        <li><code>./direkt.sh editor</code> — abrir el editor de niveles</li>
+      </ul>
+      <ul class="lista">
+        <li><code>./direkt.sh bsp a b</code> — compilar el mapa <code>a</code> en <code>b.bsp</code></li>
+        <li><code>./direkt.sh shell</code> — una shell con los binarios en el PATH</li>
+        <li><code>./bin/direkt-bsp --check b.bsp</code> — validar un .bsp</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="pie">
+    <p>
+      <b>Direkt</b> — motor derivado de Quake, GPL-2.0.
+      Motor: <a href="https://github.com/iamalex/errorfree/tree/08d578136ff43d7d1ef38e636dfbfd3e844be7cd">Ironwail</a>.
+      Datos: <a href="https://librequake.info/">LibreQuake</a>.
+    </p>
+    <p>
+      <b>Fuente</b> — <a href="https://github.com/motlaxquia/Direkt">github.com/motlaxquia/Direkt</a>.
+      El paquete incluye el fuente completo, como exige la GPL.
+    </p>
+  </footer>
+
+</div>
+</div>
+</body>
+</html>

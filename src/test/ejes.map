@@ -1,0 +1,17 @@
+// Lo mismo que box.map pero con los cinco parametros de eje escritos, para
+// comprobar que tambien se leen. Escalas de 1,2 y un desplazamiento.
+{
+"classname" "worldspawn"
+{
+( 64 0 0 )( 64 64 0 )( 64 64 64 )( 64 0 64 ) wall1 1 2 16 -8 0
+( 0 0 0 )( 0 0 64 )( 0 64 64 )( 0 64 0 ) wall1 1 2 16 -8 0
+( 0 64 0 )( 0 64 64 )( 64 64 64 )( 64 64 0 ) wall1 1 2 16 -8 0
+( 0 0 0 )( 64 0 0 )( 64 0 64 )( 0 0 64 ) wall1 1 2 16 -8 0
+( 0 0 64 )( 64 0 64 )( 64 64 64 )( 0 64 64 ) wall1 1 2 16 -8 0
+( 0 0 0 )( 0 64 0 )( 64 64 0 )( 64 0 0 ) wall1 1 2 16 -8 0
+}
+}
+{
+"classname" "info_player_start"
+"origin" "-224 -224 -32"
+}
