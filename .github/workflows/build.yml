@@ -118,7 +118,7 @@ jobs:
       # grafica, asi que aqui no se prueba el arranque del motor: se prueba
       # todo lo que no necesita ventana. El arranque se prueba en linux.
       - name: Pruebas que no necesitan ventana
-        run: make bsp-test editor-test BSP_TEST_ARGS=--sin-motor
+        run: make bsp-test editor-test BSP_TEST_ARGS=--sin-motor EDITOR_TEST_ARGS=--sin-x
 
       - name: Paquete
         run: make portable DIREKT_OS=macos
@@ -143,6 +143,9 @@ jobs:
       # En Windows no hay ni make ni gcc de serie. MSYS2 los trae, y ademas da
       # bash, que es lo que necesitan los scripts del repo.
       #
+      # El runner de Windows tiene Python, pero es el de Windows y el shell de MSYS2 no
+      # lo ve. Se instala el de MINGW64, que es el que ven make y los scripts.
+      #
       # patch viene de serie en Linux y en macOS, pero MSYS2 no lo trae, y sin
       # el los parches de patches/ no se aplican.
       #
@@ -165,6 +168,7 @@ jobs:
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-SDL2
+            mingw-w64-x86_64-python
             mingw-w64-x86_64-mesa
             patch
             zip
@@ -190,7 +194,7 @@ jobs:
 
       - name: Pruebas que no necesitan ventana
         shell: msys2 {0}
-        run: make bsp-test editor-test BSP_TEST_ARGS=--sin-motor
+        run: make bsp-test editor-test BSP_TEST_ARGS=--sin-motor EDITOR_TEST_ARGS=--sin-x
 
       - name: Paquete
         shell: msys2 {0}

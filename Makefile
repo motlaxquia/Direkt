@@ -165,11 +165,14 @@ shot: game
 # En macOS y en un runner de Windows no la hay, y se pasa --sin-motor para que
 # bsp-test se quede en las pruebas que no necesitan ventana.
 BSP_TEST_ARGS ?=
+# Igual que BSP_TEST_ARGS: sin servidor X el editor no puede dibujar, y solo se
+# comprueba la logica. Ver scripts/editor-test.sh --sin-x.
+EDITOR_TEST_ARGS ?=
 
 test: engine game game-noshowcase bsp edit
 	@$(REPO)/scripts/smoke-test.sh
 	@$(REPO)/scripts/bsp-test.sh $(BSP_TEST_ARGS)
-	@$(REPO)/scripts/editor-test.sh
+	@$(REPO)/scripts/editor-test.sh $(EDITOR_TEST_ARGS)
 
 # ------------------------------------------------- compilador de mapas (.bsp)
 # El motor no trae ninguno y LibreQuake no distribuye los .map, asi que para
@@ -234,7 +237,7 @@ bsp-test: $(BSP_BIN)
 
 # editor-test prueba el documento sin pantalla y dibuja un fotograma con Xvfb.
 editor-test: $(EDIT_BIN)
-	@$(REPO)/scripts/editor-test.sh
+	@$(REPO)/scripts/editor-test.sh $(EDITOR_TEST_ARGS)
 
 # ------------------------------------------------------------------ limpieza
 # El stage del portable son 240 MB de datos copiados: se van con clean, que ya
