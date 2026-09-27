@@ -22,13 +22,25 @@
 
 set -euo pipefail
 
+# Sistema destino del paquete. Se empaqueta para el que se este compilando, que
+# es como lo llama el workflow de GitHub Actions. Los tres usan el mismo
+# generador y los mismos datos; lo que cambia es el lanzador y el contenedor.
+OS="${DIREKT_OS:-linux}"
+case "$OS" in
+linux|macos|windows) ;;
+*)
+	echo "portable: sistema desconocido '$OS'. Usa linux, macos o windows." >&2
+	exit 1
+	;;
+esac
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="$REPO/build"
 BIN="$BUILD/bin"
 LQ="$BUILD/lq/full"
 STAGE="$BUILD/portable"
-OUT="$BUILD/direkt-portable.tar.gz"
-NOMBRE="direkt-portable"
+OUT="$BUILD/direkt-portable-$OS.tar.gz"
+NOMBRE="direkt-portable-$OS"
 
 die() { echo "portable: $*" >&2; exit 1; }
 
@@ -73,31 +85,195 @@ mkdir -p "$STAGE/fuente/cache"
 cp "$BUILD/cache/ironwail-src.tar.gz" "$STAGE/fuente/cache/"
 ( cd "$STAGE/fuente/cache" && sha256sum ironwail-src.tar.gz > ironwail-src.tar.gz.sha256 )
 
+# --- nota de entorno por sistema -------------------------------------------
+# El motor exige OpenGL 4.3 en los tres sistemas, pero lo que ofrece cada uno
+# es distinto, y conviene decirlo claro en el propio paquete y no en un
+# aviso de la pagina web.
+case "$OS" in
+macos)
+	cat > "$STAGE/LEE-ME-ENTORNO.md" <<'FIN'
+## Este paquete en macOS
+
+El motor de Ironwail pide **OpenGL 4.3**, porque usa *compute shaders* para
+dibujar el mundo.
+
+El problema: el OpenGL que trae macOS llega como mucho a **4.1**, y no hay
+forma de subirlo desde el sistema. En un Mac con una GPU de Apple, este paquete
+puede que no llegue a arrancar y se quede en:
+
+    OpenGL 4.3 required, found 4.1
+
+Esto no se arregla con un conmutador ni con un instalador: es un tope del
+sistema. Por eso el paquete se publica **para que se pruebe**, y no como algo
+que esté garantizado.
+
+### Qué hacer
+
+1. Probarlo. A veces un Mac con una GPU discreta anuncia mas de 4.1:
+       ./direkt.sh test
+2. Si falla por la version de GL, este SO no es valido para este motor. Las
+   salidas son: usar la version de Linux bajo un entorno grafico virtualizado,
+   o esperar a que el motor tenga un backend que no dependa de OpenGL.
+
+### Lo que si funciona en macOS
+
+El generador de `.bsp` (`direkt-bsp`) y el editor (`direkt-edit`) no dependen
+de la version de OpenGL que tenga el motor, asi que son usables.
+FIN
+	;;
+windows)
+	cat > "$STAGE/LEE-ME-ENTORNO.md" <<'FIN'
+## Este paquete en Windows
+
+El motor de Ironwail pide **OpenGL 4.3**. Windows por si solo no da ninguna
+version: lo pone el driver de la tarjeta grafica, y por eso hay maquinas que
+funcionan y maquinas que no.
+
+### Si dice que no llega
+
+    OpenGL 4.3 required, found 1.1
+
+Actualiza el driver desde el fabricante de tu tarjeta (NVIDIA, AMD, Intel) o
+desde Windows Update. En un equipo deSobremesa antiguo o un portatil con
+grafica integrada, el driver de Microsoft es el que peor suele quedar.
+
+### Doble clic
+
+`direkt.bat` llama a `direkt.sh`, que necesita `bash` (viene con Git Bash y con
+MSYS2). Si no lo tienes, el `.bat` va directo al motor, asi que el juego
+funciona igual; lo que se pierde es el aviso automatico cuando el OpenGL de la
+maquina no llega.
+FIN
+	;;
+*)
+	cat > "$STAGE/LEE-ME-ENTORNO.md" <<'FIN'
+## Este paquete en Linux
+
+El motor de Ironwail pide **OpenGL 4.3**, porque usa *compute shaders* para
+dibujar el mundo. Con una tarjeta grafica normal no hay nada que hacer.
+
+### Si dice que no llega
+
+    OpenGL 4.3 required, found 2.1
+
+El lanzador lo detecta y se reintenta solo con el rasterizador por software de
+Mesa (`llvmpipe`), que da OpenGL 4.5. Va mas lento, pero dibuja. Para saber si
+eso se esta usando:
+
+    glxinfo -B | grep -i "OpenGL version"
+
+Si el paquete se usa en una maquina virtual, o con drivers viejos, conviene
+tener instalado el rasterizador:
+
+    sudo apt install libgl1-mesa-dri libglx-mesa0
+
+### Forzar uno u otro
+
+    DIREKT_SOFTWARE_GL=1 ./direkt.sh    # ir siempre por software
+    DIREKT_FORCE_GL=1 ./direkt.sh       # no tocar el GL, pase lo que pase
+FIN
+	;;
+esac
+
 # --- lanzador ---------------------------------------------------------------
-# El motor toma el directorio de datos con -basedir y el de la logica con
-# -game. El lanzador se encarga de eso para que no haya que memorizar los
-# parametros, y de plano para que funcione desde donde se descomprima.
+# El lanzador de verdad es un script de shell, y va siempre en el paquete. En
+# macOS y en Windows, que no lo ejecutan con doble clic, se anade encima un
+# envoltorio de tres lineas que lo llama.
+#
+# Se evita duplicar la logica: el de shell resuelve lo de verdad (detectar el
+# OpenGL, caer a llvmpipe, pasar argumentos) y los envoltorios solo delegan.
 cat > "$STAGE/direkt.sh" <<'FIN'
 #!/usr/bin/env bash
-# Lanzador de Direkt. Se llama desde donde este el paquete.
+# Lanzador de Direkt.
 #
-#   ./direkt.sh            abre el juego con el mapa inicial
+#   ./direkt.sh            abre el juego
+#   ./direkt.sh test       comprueba que el paquete arranca de verdad
 #   ./direkt.sh editor     abre el editor de niveles
 #   ./direkt.sh bsp a b    compila el mapa a en b.bsp
-#   ./direkt.sh test       comprueba que el paquete arranca de verdad
 #   ./direkt.sh shell      deja una shell con el directorio en $PATH
 set -euo pipefail
 AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="$AQUI/bin:$PATH"
 
 # El generador de .bsp saca las texturas de ahi. En el repositorio mira en
-# build/lq/full/id1, que aqui no existe: sin esto el .bsp sale sin lump TEXTURES
-# y el motor pinta todo con la textura por defecto.
+# build/lq/full/id1, que aqui no existe: sin esto el .bsp sale sin lump
+# TEXTURES y el motor pinta con la textura por defecto.
 export DIREKT_GAMEDIR="$AQUI/datos/id1"
 
+# El motor pide OpenGL 4.3 (Quake/gl_vidsdl.c: MIN_GL_VERSION 4.3) porque usa
+# compute shaders para dibujar el mundo. En una tarjeta de verdad no hay
+# problema, pero en una maquina virtual, un portatil viejo, o un linux con los
+# drivers a medias, el GL que se anuncia se queda en 1.x o 2.x y el motor aborta
+# con "OpenGL 4.3 required, found 2.1".
+#
+# Mesa trae un rasterizador por software, llvmpipe, que SI da OpenGL 4.5 con
+# compute shaders. Va lento, pero funciona. En vez de solo documentarlo se
+# resuelve aqui: antes de arrancar se pregunta que version de GL hay, y si no
+# llega se cae a llvmpipe.
+#
+# Se sondea ANTES de lanzar y luego se hace exec, a proposito: si se lanzara el
+# motor y se esperara a ver si se queja, habria que meter su salida en un
+# fichero para poder reintentar, y el usuario se quedaria sin ver nada durante
+# toda la partida. Con exec, la ventana, el teclado y las senales siguen siendo
+# las del propio motor.
+#
+# DIREKT_SOFTWARE_GL=1 lo fuerza, y DIREKT_FORCE_GL=1 deja el GL del sistema
+# aunque no llegue.
+
+usar_llvmpipe() {
+	export LIBGL_ALWAYS_SOFTWARE=1
+	export GALLIUM_DRIVER=llvmpipe
+	export MESA_GL_VERSION_OVERRIDE="${MESA_GL_VERSION_OVERRIDE:-4.5COMPAT}"
+	export MESA_DEBUG=silent
+	# llvmpipe se reserva la mitad de los nucleos por defecto, y con eso el
+	# juego va a trompicones aunque la version de GL sea la correcta.
+	# nproc es de coreutils y no viene en macOS, que lo llama distinto.
+	local nucleos
+	nucleos="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)"
+	export LP_NUM_THREADS="${DIREKT_THREADS:-$nucleos}"
+}
+
+# Version de OpenGL que anuncia el sistema, o vazia si no se puede saber.
+version_gl() {
+	local v
+	if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+		return 1
+	fi
+	command -v glxinfo >/dev/null 2>&1 || return 1
+	v="$(glxinfo -B 2>/dev/null | sed -n 's/.*OpenGL version string: *\([0-9][0-9.]*\).*/\1/p' | head -1)"
+	[ -n "$v" ] || return 1
+	printf '%s' "$v"
+}
+
+# Devuelve 0 si la version anuncia menos de 4.3, o si no se puede saber.
+gl_insuficiente() {
+	local v major minor
+	v="$(version_gl)" || return 0          # no se sabe: se asume que vale
+	major="${v%%.*}"
+	minor="${v#*.}"; minor="${minor%%.*}"
+	[ -n "$major" ] || return 0
+	[ "$major" -lt 4 ] && return 0
+	[ "$major" -gt 4 ] && return 1
+	[ "${minor:-0}" -lt 3 ] && return 0
+	return 1
+}
+
 jugar() {
-	exec "$AQUI/bin/ironwail" -basedir "$AQUI/datos" -basedir "$AQUI" \
-		-game direkt "$@"
+	local v
+	if [ "${DIREKT_FORCE_GL:-0}" = 1 ]; then
+		:  # el usuario ha dicho que no se toque el GL
+	elif [ "${DIREKT_SOFTWARE_GL:-0}" = 1 ]; then
+		usar_llvmpipe
+	elif gl_insuficiente; then
+		v="$(version_gl)"
+		echo "  OpenGL del sistema: ${v:-desconocido}, y el motor pide 4.3."
+		echo "  Se arranca con el rasterizador por software de Mesa (llvmpipe)."
+		echo "  Va mas despacio, pero dibuja. Para no hacerlo:"
+		echo "      DIREKT_FORCE_GL=1 ./direkt.sh"
+		echo
+		usar_llvmpipe
+	fi
+	exec "$AQUI/bin/ironwail" -basedir "$AQUI/datos" -basedir "$AQUI" -game direkt "$@"
 }
 
 # Comprobacion autonoma: no necesita el arbol de desarrollo ni fteqcc, solo lo
@@ -112,8 +288,6 @@ comprobar() {
 
 	log="$(mktemp)"
 	if [ -n "${DISPLAY:-}" ]; then
-		# Ya hay pantalla. No se levanta otro Xvfb por encima: dos anidados se
-		# quedan esperando el uno al otro y esto no termina nunca.
 		lanzo=("$AQUI/bin/ironwail")
 	elif command -v xvfb-run >/dev/null 2>&1; then
 		lanzo=(xvfb-run -a "$AQUI/bin/ironwail")
@@ -123,14 +297,16 @@ comprobar() {
 		lanzo=("$AQUI/bin/ironwail")
 	fi
 
+	if [ "${DIREKT_FORCE_GL:-0}" != 1 ] && { [ "${DIREKT_SOFTWARE_GL:-0}" = 1 ] || gl_insuficiente; }; then
+		usar_llvmpipe
+	fi
+
 	"${lanzo[@]}" -basedir "$AQUI/datos" -basedir "$AQUI" -game direkt \
 		-nosound -window -width 640 -height 480 +map lqdm1 >"$log" 2>&1 &
 	pid=$!
 
 	# La senal de que el mundo esta listo la da la propia logica de juego: si
-	# encuentra el punto de aparicion, el mapa esta cargado y el jugador
-	# existe. Con rasterizado por software esto lleva mas de un minuto, asi que
-	# el margen es de 180 s.
+	# encuentra el punto de aparicion, el mapa esta cargado y el jugador existe.
 	for ((i = 0; i < espera; i++)); do
 		grep -q "punto de aparicion" "$log" && break
 		kill -0 "$pid" 2>/dev/null || break
@@ -141,6 +317,7 @@ comprobar() {
 		rc=0
 	else
 		echo "  FALLA: el mundo no llego a estar listo en ${espera}s"
+		grep -iE "OpenGL [0-9.]+ required" "$log" | head -2
 		tail -20 "$log"
 		rc=1
 	fi
@@ -155,7 +332,7 @@ comprobar() {
 
 	# OJO con el filtro: el motor avisa en minusculas de los cfg OPCIONALES que
 	# no encuentra, y "couldn't exec autoexec.cfg" es normal y sale siempre. Lo
-	# que si seria grave es que no encuentre NUESTRO cfg, el del smoke test.
+	# que si seria grave es que no encuentre NUESTRO cfg.
 	if grep -qiE 'Sys_Error|Segmentation fault' "$log"; then
 		echo "  FALLA: el log tiene un error grave:"
 		grep -iE 'Sys_Error|Segmentation fault' "$log" | head
@@ -180,6 +357,37 @@ shell)   echo "PATH=$AQUI/bin:$PATH"; exec "${SHELL:-/bin/sh}" ;;
 esac
 FIN
 chmod +x "$STAGE/direkt.sh"
+
+# Envoltorios para los sistemas que no ejecutan un .sh con doble clic.
+case "$OS" in
+macos)
+	cat > "$STAGE/direkt.command" <<'FIN'
+#!/bin/sh
+# Doble clic desde Finder. Finder ejecuta esto con su propio shell, asi que
+# solo delega en el lanzador de verdad.
+AQUI="$(cd "$(dirname "$0")" && pwd)"
+exec "$AQUI/direkt.sh" "$@"
+FIN
+	chmod +x "$STAGE/direkt.command"
+	;;
+windows)
+	cat > "$STAGE/direkt.bat" <<'FIN'
+@echo off
+REM Doble clic desde el explorador. El lanzador de verdad es un script de shell,
+REM asi que se le llama con bash, que viene con Git Bash y con MSYS2; y si no
+REM esta, se va directo al motor, que es lo unico imprescindible.
+setlocal
+set "AQUI=%~dp0"
+where bash >nul 2>&1
+if %ERRORLEVEL%==0 (
+  bash "%AQUI%direkt.sh" %*
+) else (
+  "%AQUI%bin\ironwail.exe" -basedir "%AQUI%datos" -basedir "%AQUI%" -game direkt %*
+)
+endlocal
+FIN
+	;;
+esac
 
 # --- nota de procedencia ----------------------------------------------------
 # Se escribe con la fecha y el commit. Sin esto no se puede saber de donde sale
@@ -207,13 +415,54 @@ chmod +x "$STAGE/direkt.sh"
 echo "==> Empaquetando"
 rm -rf "$BUILD/$NOMBRE"
 cp -a "$STAGE" "$BUILD/$NOMBRE"
-tar czf "$OUT" -C "$BUILD" "$NOMBRE"
+
+case "$OS" in
+windows)
+	# Un .zip, porque es lo que el explorador de archivos abre con doble clic
+	# sin preguntar nada. En Windows 11 el .tar.gz tambien se abre, pero el
+	# usuario tiene que aceptarlo a mano y parece que se ha roto.
+	if command -v zip >/dev/null 2>&1; then
+		rm -f "$OUT"
+		(cd "$BUILD" && zip -qr "$OUT" "$NOMBRE")
+	else
+		echo "    aviso: no hay 'zip' y se hace .tar.gz, que Windows si abre"
+		tar czf "$OUT" -C "$BUILD" "$NOMBRE"
+	fi
+	;;
+*)
+	tar czf "$OUT" -C "$BUILD" "$NOMBRE"
+	;;
+esac
 rm -rf "$BUILD/$NOMBRE"
 
 echo "==> $OUT"
 ls -lh "$OUT" | awk '{print "    " $5 "  " $9}'
 echo
-echo "Para usarlo:"
-echo "    tar xzf $(basename "$OUT")"
-echo "    cd $NOMBRE"
-echo "    ./direkt.sh"
+case "$OS" in
+windows)
+	echo "Para usarlo:"
+	echo "    descomprime el .zip"
+	echo "    cd $NOMBRE"
+	echo "    doble clic en direkt.bat"
+	;;
+macos)
+	echo "Para usarlo:"
+	echo "    tar xzf $(basename "$OUT")"
+	echo "    cd $NOMBRE"
+	echo "    doble clic en direkt.command"
+	echo
+	echo "La primera vez macOS lo bloqueara porque el paquete viene de internet."
+	echo "Si es asi, desde una terminal dentro de la carpeta:"
+	echo "    xattr -dr com.apple.quarantine ."
+	echo
+	echo "Y el motor pide OpenGL 4.3, que es mas de lo que ofrece el OpenGL de"
+	echo "macOS. En un Mac con una GPU de Apple puede que no llegue; en ese caso"
+	echo "este paquete no es la mejor opcion. Ver LEE-ME-ENTORNO.md."
+	;;
+*)
+	echo "Para usarlo:"
+	echo "    tar xzf $(basename "$OUT")"
+	echo "    cd $NOMBRE"
+	echo "    ./direkt.sh"
+	;;
+esac

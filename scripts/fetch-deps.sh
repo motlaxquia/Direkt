@@ -28,11 +28,25 @@ LIBRQUAKE_SHA256="623e463b35811216244f9ba15e0c45abc1765288650b5e3d36a899b35e4bcf
 die() { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
 
+# SHA-256 de un fichero, con la herramienta que haya.
+#
+# sha256sum es de coreutils y no viene en macOS, que trae shasum. Sin esto el
+# script entero no arranca alli, que es justo donde hace falta para compilar.
+sha256_de() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d' ' -f1
+  else
+    die "no hay ni sha256sum ni shasum. En macOS: brew install coreutils"
+  fi
+}
+
 verify_sha256() {
   local file="$1" expected="$2" what="$3"
   [[ -z "$expected" ]] && die "SHA-256 fijado vacio para $what. Ejecuta 'make lock' para generarlo."
   local actual
-  actual="$(sha256sum "$file" | cut -d' ' -f1)"
+  actual="$(sha256_de "$file")"
   if [[ "$actual" != "$expected" ]]; then
     die "SHA-256 incorrecto para $what
   esperado: $expected
@@ -118,8 +132,8 @@ cmd_lock() {
   fetch "$IRONWAIL_TARBALL_URL" "$CACHE_DIR/ironwail-src.tar.gz"
   fetch "$LIBRQUAKE_URL" "$CACHE_DIR/librequake-full.zip"
   echo "--- Genera esto y pegalo en scripts/fetch-deps.sh ---"
-  echo "IRONWAIL_SHA256=\"$(sha256sum "$CACHE_DIR/ironwail-src.tar.gz" | cut -d' ' -f1)\""
-  echo "LIBRQUAKE_SHA256=\"$(sha256sum "$CACHE_DIR/librequake-full.zip" | cut -d' ' -f1)\""
+  echo "IRONWAIL_SHA256=\"$(sha256_de "$CACHE_DIR/ironwail-src.tar.gz")\""
+  echo "LIBRQUAKE_SHA256=\"$(sha256_de "$CACHE_DIR/librequake-full.zip")\""
 }
 
 cmd_verify() {

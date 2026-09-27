@@ -52,6 +52,20 @@ if [[ "${1:-}" == "--check" ]]; then
   exit 1
 fi
 
+# ------------------------------------------------------------------ solo Linux
+#
+# Todo lo de aqui es apt, y apt es de Debian. En macOS y en Windows esto no
+# tiene sentido: las dependencias se instalan con brew y con pacman/MSYS2
+# respectivamente, y lo hace el workflow de GitHub Actions. Asi que en cualquier
+# otro sitio esto no hace nada y lo dice, en vez de fallar con un "apt not
+# found" a mitad de un script que el usuario no puede arreglar.
+if ! command -v apt-get >/dev/null 2>&1; then
+  echo "==> Este script instala con apt, que es de Debian."
+  echo "    En Linux sin problema. En macOS: brew install sdl2 fteqcc cmake pkg-config"
+  echo "    En Windows, desde MSYS2: pacman -S mingw-w64-x86_64-{gcc,make,cmake,pkg-config,sdl2} mingw-w64-x86_64-fteqcc"
+  exit 0
+fi
+
 SUDO=""
 if [[ "$(id -u)" != "0" ]]; then
   if ! sudo -n true 2>/dev/null; then

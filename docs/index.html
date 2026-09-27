@@ -157,6 +157,57 @@ a:hover{text-decoration-thickness:2px}
   margin:0 0 .9rem;
 }
 
+/* --- elegir sistema -------------------------------------------------- */
+
+.plataformas{text-align:center}
+.plataformas-titulo{
+  font-size:.72rem;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--gris-2);
+  margin:0 0 .8rem;
+}
+.plataformas-lista{
+  list-style:none;
+  margin:0;
+  padding:0;
+  display:flex;
+  flex-wrap:wrap;
+  gap:.6rem;
+  justify-content:center;
+}
+.plataformas-lista a{
+  display:block;
+  padding:.55rem 1.1rem;
+  border:1px solid var(--linea);
+  background:var(--papel-2);
+  text-decoration:none;
+  color:var(--tinta);
+  transition:background .15s, border-color .15s;
+}
+.plataformas-lista a:hover,
+.plataformas-lista a:focus-visible{
+  background:var(--tinta);
+  color:var(--papel);
+  border-color:var(--tinta);
+}
+.plataformas-lista b{font-weight:normal; letter-spacing:.12em; text-transform:uppercase}
+.plataformas-lista span{color:var(--gris); font-size:.8rem; margin-left:.5em}
+.plataformas-lista a:hover span,
+.plataformas-lista a:focus-visible span{color:rgba(255,255,255,.7)}
+
+/* El del sistema que ha detectado el script. No se oculta el resto: estan
+   todos, porque hay gente que descarga para otra maquina. */
+.plataformas-lista a[data-actual]{
+  border-color:var(--tinta);
+  border-width:2px;
+}
+.plataformas-nota{
+  margin:1rem 0 0;
+  font-size:.9rem;
+  color:var(--gris);
+}
+
 /* --- la descarga --------------------------------------------------- */
 
 .carta{
@@ -313,20 +364,42 @@ ul.lista li::before{
 
     <div class="carta">
       <!--
-        La unica cosa que hay que cambiar para publicar otra version es esta
-        URL. Con "releases/latest" la pagina no hay que tocarla en cada
-        version nueva: el enlace apunta siempre a la mas reciente.
+        La unica cosa que hay que cambiar para publicar otra version son los
+        enlaces de mas abajo. Con "releases/latest" la pagina no hay que tocarla
+        en cada version nueva: apuntan siempre a la mas reciente.
+
+        El boton grande no lleva un href fijo a proposito. El script del final
+        lo rellena con el paquete del sistema desde el que se esta viendo la
+        pagina, y si el Javascript va desactivado se queda en el de Linux, que
+        es el que mas gente usa. Los tres enlaces de abajo están siempre, para
+        que elegir a mano no dependa de que el Javascript funcione.
       -->
       <a class="enlace-dientes dientes dientes--grande" id="descarga"
-         href="https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable.tar.gz"
+         href="https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-linux.tar.gz"
          download>
         <span class="dentro">
           <span class="boton">
             <span class="grito">Bajar</span>
-            <span class="fichero">direkt-portable.tar.gz &middot; 127 MB</span>
+            <span class="fichero" id="fichero-descarga">direkt-portable-linux.tar.gz &middot; 127 MB</span>
           </span>
         </span>
       </a>
+
+      <nav class="plataformas" aria-label="Elegir sistema">
+        <p class="plataformas-titulo" id="t-plataformas">Paquete para tu sistema</p>
+        <ul class="plataformas-lista">
+          <li><a href="https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-linux.tar.gz"
+                 data-so="linux"><b>Linux</b> <span>tar.gz &middot; 127 MB</span></a></li>
+          <li><a href="https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-macos.tar.gz"
+                 data-so="macos"><b>macOS</b> <span>tar.gz &middot; 127 MB</span></a></li>
+          <li><a href="https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-windows.zip"
+                 data-so="windows"><b>Windows</b> <span>zip &middot; 127 MB</span></a></li>
+        </ul>
+        <p class="plataformas-nota" id="nota-plataformas">
+          Todos los paquetes llevan los binarios, los datos del juego y el
+          codigo fuente, que es lo que pide la GPL.
+        </p>
+      </nav>
 
       <div>
         <dl class="datos">
@@ -334,7 +407,7 @@ ul.lista li::before{
           <dt>Tamano</dt><dd>133 099 467 bytes (126,9 MiB)</dd>
           <dt>Motor</dt><dd>Ironwail 08d5781</dd>
           <dt>Datos</dt><dd>LibreQuake (pak0.pak + pak1.pak)</dd>
-          <dt>Sistema</dt><dd>Linux x86-64</dd>
+          <dt>Sistema</dt><dd>Windows, macOS o Linux &middot; x86-64</dd>
           <dt>Licencia</dt><dd>GPL-2.0</dd>
         </dl>
         <p class="aviso">
@@ -360,8 +433,8 @@ ul.lista li::before{
         <span class="dentro">
           <span class="n">1</span>
           <h3>Descomprime</h3>
-          <pre>tar xzf direkt-portable.tar.gz
-cd direkt-portable</pre>
+          <pre>tar xzf direkt-portable-linux.tar.gz
+cd direkt-portable-linux</pre>
         </span>
       </div>
 
@@ -409,10 +482,17 @@ cd direkt-portable</pre>
     <h2 id="t-req">Lo que hace falta en tu equipo</h2>
     <p>Nada que compilar. Solo esto:</p>
     <ul class="lista">
-      <li><b>SDL2</b> y <b>OpenGL</b> (<code>libsdl2-2.0-0</code>, <code>libgl1</code>)</li>
-      <li>Para jugar sin tarjeta grafica: <b>Mesa</b> (<code>libgl1-mesa-dri</code>), que va por software</li>
+      <li><b>OpenGL 4.3</b>. El motor usa <i>compute shaders</i> para dibujar el mundo, y por eso pide esa version y no una anterior. Con una tarjeta grafica de los ultimos diez años esto se cumple solo.</li>
+      <li><b>SDL2</b> (<code>libsdl2-2.0-0</code>, <code>libgl1</code>)</li>
+      <li>Para jugar sin tarjeta grafica: <b>Mesa</b> (<code>libgl1-mesa-dri</code>), que dibuja por software. El lanzador cae ahi solo cuando detecta que el OpenGL de la maquina no llega.</li>
       <li>Opcional: <code>xvfb</code> para la comprobacion automatica, <code>imagemagick</code> para las capturas</li>
     </ul>
+    <p class="aviso">
+      En <b>macOS</b> esto no se cumple: el OpenGL del sistema llega como mucho
+      a 4.1 y no hay forma de subirlo. El paquete se publica para probarlo, pero
+      en un Mac con GPU de Apple el motor probablemente no arrancara. El
+      generador de mapas y el editor si que funcionan.
+    </p>
     <p class="aviso">
       En Debian y Ubuntu:
       <code>sudo apt install libsdl2-2.0-0 libgl1 libgl1-mesa-dri xvfb</code>
@@ -426,7 +506,7 @@ cd direkt-portable</pre>
       Un fichero de 127 MB se puede cortar por el camino. El hash SHA-256
       sale impreso en cuanto se acaba de bajar:
     </p>
-    <pre class="hash">09dd71f56f7ade18f85e490bc60637d6e6f4f6726adc625b76d4cb19db60d8a6  direkt-portable.tar.gz</pre>
+    <pre class="hash" id="hash">60f3f8c8ee564fce5b4f986847125f41a100901092f19f719ca6f79d3078d9d1  direkt-portable-linux.tar.gz</pre>
     <p style="margin-top:1.1rem">
       Y se comprueba con <code>sha256sum -c</code>, que tiene que responder
       <code>OK</code>:
@@ -464,5 +544,74 @@ cd direkt-portable</pre>
 
 </div>
 </div>
+<script>
+// Rellena el boton grande con el paquete del sistema desde el que se esta
+// viendo la pagina, y marca ese mismo sistema en la lista de abajo.
+//
+// Sin Javascript el boton se queda apuntando al paquete de Linux, que es el
+// href que trae en el HTML, y los tres enlaces de la lista siguen valiendo.
+// Por eso el boton no se escribe aqui, solo se corrige: la pagina funciona
+// entera con el Javascript desactivado.
+(function () {
+  'use strict';
+
+  // El orden importa: iPadOS se hace pasar por Mac en navigator.platform, y
+  // Chrome en Windows dice "Win32" pero en ARM tambien. Se mira lo mas
+  // concreto primero.
+  var UA = navigator.userAgent || '';
+  var SO = '';
+
+  if (/Windows/i.test(UA) || /Win32|Win64/i.test(navigator.platform)) {
+    SO = 'windows';
+  } else if (/Android/i.test(UA)) {
+    SO = 'android';
+  } else if (/iPhone|iPad|iPod/i.test(UA)) {
+    SO = 'ios';
+  } else if (/Mac OS X|Macintosh/i.test(UA)) {
+    SO = 'macos';
+  } else if (/Linux|X11/i.test(UA)) {
+    SO = 'linux';
+  }
+
+  var Nombres = {
+    linux: 'direkt-portable-linux.tar.gz',
+    macos: 'direkt-portable-macos.tar.gz',
+    windows: 'direkt-portable-windows.zip'
+  };
+
+  var enlace = document.getElementById('descarga');
+  var fichero = document.getElementById('fichero-descarga');
+  var nota = document.getElementById('nota-plataformas');
+
+  if (!enlace || !Nombres[SO]) {
+    return; // Android, iOS o algo que no se reconoce: se deja el de Linux.
+  }
+
+  var enlaces = document.querySelectorAll('.plataformas-lista a[data-so]');
+  var i;
+  for (i = 0; i < enlaces.length; i++) {
+    if (enlaces[i].getAttribute('data-so') === SO) {
+      enlace.href = enlaces[i].href;
+      enlaces[i].setAttribute('data-actual', '');
+      break;
+    }
+  }
+
+  if (fichero) {
+    fichero.textContent = Nombres[SO] + ' \u00b7 127 MB';
+  }
+
+  // En macOS hay que avisar, porque el paquete puede que no arranque: el motor
+  // pide OpenGL 4.3 y el OpenGL de macOS no pasa de 4.1. Es mejor decirlo
+  // aqui que dejar que el usuario se encuentre con un error de OpenGL.
+  if (SO === 'macos' && nota) {
+    nota.innerHTML =
+      'Antes de nada: el motor pide <b>OpenGL 4.3</b> y el OpenGL de macOS ' +
+      'llega como mucho a 4.1, asi que en muchos Mac este paquete no llegara ' +
+      'a arrancar. El generador de mapas y el editor si que funcionan. Al ' +
+      'descomprimirlo, el fichero <b>LEE-ME-ENTORNO.md</b> lo explica.';
+  }
+})();
+</script>
 </body>
 </html>
