@@ -93,14 +93,28 @@ $(IW_VER): $(ENGINE)/.patches-applied
 game:
 	@$(MAKE) --no-print-directory -B $(GAME_PROGS)
 
+# En las tres recetas de aqui, el tamano se saca con
+#     stat -c%s FICHERO 2>/dev/null || stat -f %z FICHERO
+# porque el stat de coreutils (Linux, MSYS2) y el de BSD (macOS) no se
+# entienden: el primero usa -c y el segundo -f.
+#
+# Todo el condicional va en UNA sola linea de receta a proposito: cada linea de
+# una receta es una invocacion de shell distinta, asi que un "exit 0" a mitad
+# solo terminaba esa linea y make seguia con la siguiente. Aqui, en cambio, o se
+# compila con fteqcc o se usa el progs.dat que ya venia en el repo.
 $(GAME_PROGS): $(GAME_SOURCES)
-	@command -v fteqcc >/dev/null || { \
-		echo "ERROR: falta fteqcc. Ejecuta 'make setup'." >&2; exit 1; }
-	@echo "==> Compilando la logica de juego -> direkt/progs.dat"
-	@mkdir -p $(REPO)/direkt
-	@cd $(REPO)/game && fteqcc progs.src
-	@test -s $(GAME_PROGS) || { echo "ERROR: fteqcc no produjo progs.dat" >&2; exit 1; }
-	@echo "    ok: $$(stat -c%s $(GAME_PROGS)) bytes"
+	@if command -v fteqcc >/dev/null; then \
+		echo "==> Compilando la logica de juego -> direkt/progs.dat"; \
+		mkdir -p $(REPO)/direkt; \
+		(cd $(REPO)/game && fteqcc progs.src); \
+		test -s '$(GAME_PROGS)' || { echo "ERROR: fteqcc no produjo progs.dat" >&2; exit 1; }; \
+		echo "    ok: $$(stat -c%s '$(GAME_PROGS)' 2>/dev/null || stat -f %z '$(GAME_PROGS)') bytes"; \
+	elif [ -s '$(GAME_PROGS)' ]; then \
+		echo "==> No hay fteqcc. Se usa el progs.dat del repo ($$(stat -c%s '$(GAME_PROGS)' 2>/dev/null || stat -f %z '$(GAME_PROGS)') bytes)."; \
+		echo "    Para recompilarlo: instala fteqcc con 'make setup' y repite."; \
+	else \
+		echo "ERROR: falta fteqcc y no hay progs.dat en el repo." >&2; exit 1; \
+	fi
 
 game-noshowcase:
 	@rm -f $(GAME_PROGS_NS) $(GAME_PROGS)
@@ -116,7 +130,7 @@ $(GAME_PROGS_NS): $(GAME_SOURCES)
 	@test -s $(GAME_PROGS) || { echo "ERROR: fteqcc no produjo progs.dat" >&2; exit 1; }
 	@mv $(GAME_PROGS) $(GAME_PROGS_NS)
 	@rm -f $(REPO)/game/progs.lno
-	@echo "    ok: $$(stat -c%s $(GAME_PROGS_NS)) bytes"
+	@echo "    ok: $$(stat -c%s $(GAME_PROGS_NS) 2>/dev/null || stat -f %z $(GAME_PROGS_NS)) bytes"
 	@$(MAKE) --no-print-directory game
 
 run: game

@@ -59,9 +59,13 @@ jobs:
 
       # Homebrew ya viene en el runner. El make de serie es el 3.81, que no
       # entiende de .SHELLFLAGS, asi que se instala el de brew.
+      #
+      # fteqcc no se instala aqui porque no esta en brew, y no hace falta: la
+      # logica de juego va ya compilada en progs.dat, que es bytecode y da igual
+      # en que sistema se compilo. En Linux, donde si hay fteqcc, se recompila.
       - name: Dependencias
         run: |
-          brew install make cmake pkg-config sdl2 fteqcc
+          brew install make cmake pkg-config sdl2
 
       - name: Motor
         run: make engine
@@ -94,33 +98,48 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
-        shell: msys2 {0}
+        # El shell msys2 solo existe DESPUES de que este paso instala MSYS2.
+        # Por eso el primer paso va en pwsh, que si viene de serie.
+        shell: pwsh
     steps:
       - uses: actions/checkout@v4
 
-      # En Windows no hay ni make ni gcc de serie. MSYS2 los trae y ademas da
+      # En Windows no hay ni make ni gcc de serie. MSYS2 los trae, y ademas da
       # bash, que es lo que necesitan los scripts del repo.
-      - name: Dependencias
-        run: |
-          pacman -Syu --noconfirm --needed \
-            mingw-w64-x86_64-gcc \
-            mingw-w64-x86_64-make \
-            mingw-w64-x86_64-cmake \
-            mingw-w64-x86_64-pkg-config \
-            mingw-w64-x86_64-SDL2 \
-            mingw-w64-x86_64-fteqcc \
+      #
+      # MSYS2 se instala con su propia accion, que ademas deja disponible el
+      # shell "msys2 {0}" para los pasos siguientes. Por eso los pasos de aqui
+      # en adelante no llevan "shell:" y usan ese.
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          # Se fija a false porque ya se ha instalado lo de mas abajo y porque
+          # un segundo "pacman -Syu" al empezar reinicia el shell y rompe el
+          # paso que lo esta usando.
+          release: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-SDL2
             zip
 
       - name: Motor
+        shell: msys2 {0}
         run: make engine
 
       - name: Generador, editor y datos
+        shell: msys2 {0}
         run: make bsp edit data
 
       - name: Pruebas que no necesitan ventana
+        shell: msys2 {0}
         run: make bsp-test editor-test
 
       - name: Paquete
+        shell: msys2 {0}
         run: make portable DIREKT_OS=windows
 
       - name: Adjuntar a la release
