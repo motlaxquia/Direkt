@@ -46,7 +46,13 @@ jobs:
       - name: Generador, editor y datos
         run: make bsp edit
 
+      # El runner tiene 2 nucleos y dibuja por software con llvmpipe, asi que
+      # 6 s de reloj son muchos menos frames que en una maquina normal. El
+      # smoke test mide el brillo del escaparate en una captura, y con tan pocos
+      # frames la captura sale antes de que se encienda. Se le da mas margen.
       - name: Todas las pruebas
+        env:
+          SETTLE: "25"
         run: make test
 
       - name: Paquete
@@ -142,6 +148,7 @@ jobs:
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-SDL2
+            mingw-w64-x86_64-opengl
             zip
 
       - uses: actions/cache@v4
