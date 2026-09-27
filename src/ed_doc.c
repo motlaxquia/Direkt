@@ -520,21 +520,10 @@ void ed_mark(ed_doc_t *doc)
  * apunta a punteros que acaban de dejar de existir. */
 static void reload_from(ed_doc_t *doc, const char *text)
 {
-	map_t *m;
-	FILE *f;
-	char tmp[] = "/tmp/direkt-ed-XXXXXX";
-	int fd = mkstemp(tmp);
-
-	if (fd < 0)
-		error("no se puede crear el temporal para recargar el documento");
-	f = fdopen(fd, "wb");
-	if (!f)
-		error("no se puede escribir el temporal del documento");
-	fwrite(text, 1, strlen(text), f);
-	fclose(f);
-
-	m = parse_map(tmp);
-	remove(tmp);
+	/* Se relee del texto en memoria, sin escribir nada a disco. Antes se
+	 * escribia en "/tmp/direkt-ed-XXXXXX" con mkstemp, y en Windows no hay ni
+	 * /tmp ni mkstemp, con lo que recargar un documento reventaba. */
+	map_t *m = parse_map_text(text);
 
 	free_map(doc->map);
 	doc->map = m;

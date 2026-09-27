@@ -25,6 +25,20 @@ set -euo pipefail
 # Sistema destino del paquete. Se empaqueta para el que se este compilando, que
 # es como lo llama el workflow de GitHub Actions. Los tres usan el mismo
 # generador y los mismos datos; lo que cambia es el lanzador y el contenedor.
+# sha256sum es de coreutils y no viene en macOS, donde el mismo hash se pide
+# con shasum -a 256. La salida es identica en los dos casos.
+# Es un array y no una variable porque "shasum -a 256" son dos palabras: con
+# "$HASH_CMD" entrecomillado se buscaria un binario llamado literalmente
+# "shasum -a 256", que no existe.
+if command -v sha256sum >/dev/null 2>&1; then
+	HASH_CMD=(sha256sum)
+elif command -v shasum >/dev/null 2>&1; then
+	HASH_CMD=(shasum -a 256)
+else
+	echo "portable: hace falta sha256sum o shasum para incluir el hash" >&2
+	exit 1
+fi
+
 OS="${DIREKT_OS:-linux}"
 case "$OS" in
 linux|macos|windows) ;;
@@ -83,7 +97,10 @@ cp "$REPO/Makefile" "$REPO/LICENSE" "$REPO/README.md" "$REPO/THIRD_PARTY.md" \
 echo "    tarball del motor"
 mkdir -p "$STAGE/fuente/cache"
 cp "$BUILD/cache/ironwail-src.tar.gz" "$STAGE/fuente/cache/"
-( cd "$STAGE/fuente/cache" && sha256sum ironwail-src.tar.gz > ironwail-src.tar.gz.sha256 )
+# El hash va en formato "sha256sum -c", que es el que luego leen los scripts de
+# este paquete. En macOS no hay sha256sum, hay shasum: los dos dan el mismo
+# formato de salida y el fichero se comprueba igual en los tres sistemas.
+( cd "$STAGE/fuente/cache" && "${HASH_CMD[@]}" ironwail-src.tar.gz > ironwail-src.tar.gz.sha256 )
 
 # --- nota de entorno por sistema -------------------------------------------
 # El motor exige OpenGL 4.3 en los tres sistemas, pero lo que ofrece cada uno
