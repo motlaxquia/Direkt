@@ -1,15 +1,41 @@
 # Direkt
 
-Direkt **no es un juego**. Es la base para construir uno: un motor de Quake
-fijado por commit y con parches, un generador de `.bsp` propio, un editor de
-niveles, y una batería de pruebas que mide de verdad si el render funciona.
-
-La lógica de juego que hay (`game/qc/`) es lo mínimo para demostrar que la
-maquinaria funciona de punta a punta, no un juego terminado. Si quieres un FPS,
-cambias lo que haya en `game/qc/` y te quedas con todo lo demás.
+Motor de nivel tipo Quake, sobre
+[Ironwail](https://github.com/andrei-drexler/ironwail/tree/08d578136ff43d7d1ef38e636dfbfd3e844be7cd)
+y con los recursos de [LibreQuake](https://github.com/lavenderdotpet/LibreQuake/releases/tag/v0.09-beta).
+Trae un generador de `.bsp` propio, un editor de niveles, la lógica de juego
+en QuakeC y una batería de pruebas que mide el render de verdad.
 
 Licencia: **GPL-2.0**. Ver [`LICENSE`](LICENSE) y
 [`THIRD_PARTY.md`](THIRD_PARTY.md).
+
+## Descarga
+
+**[⬇ direkt-portable.tar.gz](https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable.tar.gz)** — 127 MB · Linux x86-64
+
+Paquete portable con los binarios ya compilados, los datos y el fuente entero,
+que es lo que obliga la GPL.
+
+```sh
+tar xzf direkt-portable.tar.gz
+cd direkt-portable
+./direkt.sh            # jugar
+```
+
+`./direkt.sh` es el lanzador: `jugar` por defecto, y también `test`, `editor`,
+`bsp <mapa> <salida>` y `shell`.
+
+SHA-256 del paquete:
+
+```
+09dd71f56f7ade18f85e490bc60637d6e6f4f6726adc625b76d4cb19db60d8a6  direkt-portable.tar.gz
+```
+
+En una máquina sin tarjeta gráfica hace falta Mesa, que va por software:
+
+```sh
+sudo apt install libsdl2-2.0-0 libgl1 libgl1-mesa-dri xvfb
+```
 
 ## Qué hay aquí
 
@@ -22,24 +48,6 @@ Licencia: **GPL-2.0**. Ver [`LICENSE`](LICENSE) y
 | `docs/ARCHITECTURA.md` | Qué formatos acepta el motor de verdad, con el `fichero:línea` de cada dato. |
 | `Makefile` | Todo lo que se puede hacer. `make help` las lista. |
 | `build/` | Todo lo descargado o generado. Ignorado por git. |
-
-## Descargar
-
-Hay un paquete portable con los binarios ya compilados, los datos y el fuente
-entero (lo obliga la GPL):
-
-```sh
-tar xzf direkt-portable.tar.gz
-cd direkt-portable
-./direkt.sh            # jugar
-```
-
-`./direkt.sh` es el lanzador: `jugar` por defecto, y también `test`, `editor`,
-`bsp <mapa> <salida>` y `shell`.
-
-También hay una [página de descarga](https://motlaxquia.github.io/Direkt/) en
-[`docs/index.html`](docs/index.html), que es lo que sirve GitHub Pages desde la
-carpeta `/docs`.
 
 ## Puesta en marcha
 
@@ -57,6 +65,20 @@ de LibreQuake se unpackean en `build/lq/full/`, que es el *basedir* que el motor
 exige (`<basedir>/id1/pak0.pak`). Las versiones están fijadas por commit y por
 SHA-256 en `scripts/fetch-deps.sh`.
 
+Tres cosas de la estructura que conviene tener a mano:
+
+- **La lógica de juego va en `game/qc/`** y se compila con `fteqcc` a
+  `direkt/progs.dat`, que es lo que el motor ejecuta. `game/progs.src` dice qué
+  ficheros entran y en qué orden. `defs.qc` son las definiciones canónicas de
+  id/LibreQuake y no se tocan.
+- **El motor se parchea, no se edita.** Los cambios van en `patches/*.patch` y se
+  aplican solos en `make deps` y `make engine`, en orden alfabético, con
+  `patch -p1 --forward`. Así el motor siempre se puede volver a extraer del
+  tarball y el diff queda legible.
+- **La prueba es parte del contrato.** `make test` mide el render comparando
+  capturas, así que un cambio que rompe el mundo sale con un fallo y no con un
+  "ahora se ve raro".
+
 ### Sin tarjeta gráfica
 
 `scripts/xvfb-env.sh` levanta un Xvfb y fuerza Mesa/llvmpipe. El render por
@@ -69,30 +91,6 @@ source scripts/xvfb-env.sh
 make run-headless              # arranca, captura y se apaga
 make shot MAP=lq_e1m1          # captura de otro mapa
 ```
-
-## Cómo se construye tu juego aquí
-
-Esto es lo que hace falta saber para usar el repositorio como base:
-
-1. **La lógica va en `game/qc/`.** Se compila con `fteqcc` a `direkt/progs.dat`, y
-   lo que sea en ese `progs.dat` es lo que el motor ejecuta. `game/progs.src`
-   dice qué ficheros entran y en qué orden; si añades uno, añádelo ahí.
-2. **`defs.qc` no se toca.** Son las definiciones canónicas de id. Cambiarlas
-   desincroniza el QC de los tipos de protocolo con los del motor.
-3. **El motor se parchea, no se edita.** Los cambios van en `patches/*.patch` y se
-   aplican solos en `make deps`/`make engine`, en orden alfabético, con
-   `patch -p1 --forward`. Así el motor siempre se puede volver a extraer del
-   tarball y el diff es legible.
-4. **Los niveles se compilan con `direkt-bsp`** (ver más abajo) y se editan con
-   `direkt-edit`. No hace falta Radiant ni ericw-tools.
-5. **La prueba es parte del contrato.** `make test` mide el render comparando
-   capturas. Un cambio que rompe el mundo sale con un fallo, no con un "ahora se
-   ve raro".
-
-Lo que **no** viene resuelto, porque es lo que hay que escribir: salto, enemigos,
-IA, armas propias, música, y el lump de visibilidad. Este último es un problema
-aparte y no trivial: sin él el motor ve el mapa entero, lo cual va bien mientras
-los niveles sean pequeños.
 
 ## Mapas propios: `direkt-bsp`
 
@@ -282,12 +280,3 @@ Esta es la parte del repositorio que más vale la pena leer antes de tocar nada.
 - **Ironwail y Quakespasm darkened igual `lq_e1m1`**, así que su spawn oscuro no
   es un fallo del motor. Para las pruebas se usa `lqdm1`.
 - **`gfx/pop.lmp` está en `pak1.pak`**, no en `pak0.pak`.
-
-## Estado
-
-La maquinaria está verificada de punta a punta: el motor carga nuestro
-`progs.dat`, el generador produce `.bsp` que el motor dibuja con textura y luz,
-el jugador se apoya en el suelo y lo paran los muros, y el editor coloca y
-compila niveles.
-
-Lo que falta es juego: salto, enemigos, IA, y el lump de visibilidad.
