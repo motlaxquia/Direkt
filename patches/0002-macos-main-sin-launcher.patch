@@ -1,0 +1,20 @@
+--- a/Quake/main_sdl.c	2026-09-27 18:59:12.514987267 +0000
++++ b/Quake/main_sdl.c	2026-09-27 18:59:12.516987267 +0000
+@@ -120,7 +120,16 @@
+ 
+ // On OS X we call SDL_main from the launcher, but SDL2 doesn't redefine main
+ // as SDL_main on OS X anymore, so we do it ourselves.
+-#if defined(__APPLE__)
++//
++// El "launcher" del que habla el comentario de arriba es el ejecutable que
++// lleva el paquete .app de Ironwail: ese binario es el que define main y llama
++// a SDL_main. Cuando se compila un ejecutario a secas, como hace este proyecto,
++// no hay nadie que defina main, y el enlazado acaba con
++//   Undefined symbols for architecture arm64: "_main"
++//
++// Por eso el renombrado solo se hace si de verdad hay launcher, que se indica
++// definiendo APPLE_BUNDLE_LAUNCHER. CMake no lo define en este repo.
++#if defined(__APPLE__) && defined(APPLE_BUNDLE_LAUNCHER)
+ #define main SDL_main
+ #endif
+ 
