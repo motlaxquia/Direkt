@@ -41,11 +41,25 @@ head_() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 [[ -x "$EDIT" ]] || die "no existe $EDIT. Ejecuta 'make edit'."
+
+# stdbuf saca la salida linea a linea. Sin esto, cuando la salida va a un
+# fichero, C la guarda en un bloque de 4 KB y si el programa revienta a mitad se
+# pierde todo lo que hubiera escrito antes. Asi fue como un fallo del selftest en
+# Windows salio como un "FALLA" sin una sola linea de detalle: no era que no
+# escribiera, era que lo escrito no habia llegado a salir del buffer.
+#
+# En Windows el .exe tambien necesita la extension para que el shell de MSYS2 lo
+# encuentre; sin ella [[ -x ]] y la ejecucion fallan en silencio.
+EDIT_RUN=()
+if command -v stdbuf >/dev/null 2>&1; then
+  EDIT_RUN=(stdbuf -oL -eL)
+fi
+[[ -f "$EDIT" ]] || EDIT="$EDIT.exe"
 mkdir -p "$SHOTS" "$BUILD/logs"
 
 # --------------------------------------------------------------- 1. selftest
 head_ "1. La logica de edicion, sin pantalla"
-if "$EDIT" --selftest >"$BUILD/editor-selftest.out" 2>&1; then
+if "${EDIT_RUN[@]}" "$EDIT" --selftest >"$BUILD/editor-selftest.out" 2>&1; then
   pass "el selftest del editor pasa entero"
   grep -E "pasan" "$BUILD/editor-selftest.out" | sed 's/^/        /'
 else
@@ -152,7 +166,7 @@ done
 
 # El selftest con un mapa de entrada hace la ida y vuelta de verdad: escribe,
 # relee y compara el texto.
-if "$EDIT" --selftest "$REPO_ROOT/src/test/habitacion.map" \
+if "${EDIT_RUN[@]}" "$EDIT" --selftest "$REPO_ROOT/src/test/habitacion.map" \
      >"$BUILD/editor-rt.out" 2>&1; then
   pass "ida y vuelta de .map: el texto guardado es identico al releido"
 else
