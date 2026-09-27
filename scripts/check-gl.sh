@@ -4,6 +4,17 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# En macOS y en Windows no hay Xvfb, y en un runner de CI tampoco hay sesion
+# grafica. Ahi no hay nada que comprobar, y reventar el script por eso seria
+# dejar sin poder ni compilar. Se avisa y se sale bien: la comprobacion de
+# OpenGL es para la maquina de quien lo usa, no para un runner sin pantalla.
+if ! command -v Xvfb >/dev/null 2>&1 && [ -z "${DISPLAY:-}" ]; then
+  echo "  No hay servidor X ni Xvfb: no se puede comprobar el OpenGL."
+  echo "  En Linux con una pantalla esto si se comprueba."
+  exit 0
+fi
+
 # shellcheck source=./xvfb-env.sh
 source "$REPO_ROOT/scripts/xvfb-env.sh"
 
