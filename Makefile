@@ -208,6 +208,7 @@ endif
 EDIT_LIBS := $(shell pkg-config --libs sdl2 2>/dev/null) $(EDIT_GL) -lm
 
 bsp: $(BSP_BIN)
+	@$(REPO)/scripts/copy-runtime-dlls.sh
 
 $(BSP_BIN): $(BSP_SRC) $(addprefix $(REPO)/src/,$(CORE_HDR))
 	@mkdir -p $(BIN)
@@ -218,6 +219,7 @@ $(BSP_BIN): $(BSP_SRC) $(addprefix $(REPO)/src/,$(CORE_HDR))
 
 # El editor necesita SDL2 y OpenGL, que ya estan porque el motor los usa.
 edit: $(EDIT_BIN)
+	@$(REPO)/scripts/copy-runtime-dlls.sh
 
 $(EDIT_BIN): $(EDIT_SRC) $(addprefix $(REPO)/src/,$(CORE_HDR) $(EDIT_HDR))
 	@command -v pkg-config >/dev/null || { \
