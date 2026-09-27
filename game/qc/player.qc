@@ -26,6 +26,7 @@ void(entity jugador, float bit) direkt_arma_anadir;
 void()	direkt_agacha;
 void()	direkt_agacha_anda_lento;
 void()	direkt_test_agacha;
+void()	direkt_test_suelo;
 
 // Cuantos objetos se comprueban cuando se pide el selftest con el impulso 9.
 #define DIREKT_TEST_OBJETOS 50
@@ -87,6 +88,15 @@ float	direkt_test_municion;
 
 // Paso de la prueba de agachado.
 float	direkt_test_agacha_paso;
+
+// ------------------------------------------------------------------ suelo
+// Sonda de apoyo: el motor no expone FL_ONGROUND a QuakeC, asi que la unica
+// forma de saber si el jugador se sostiene es mirar si su origen deja de bajar.
+// Se guarda la altura al arrancar y se compara un instante despues.
+float	direkt_test_suelo_paso;
+float	direkt_test_suelo_z0;
+float	direkt_test_suelo_dz;
+float	direkt_test_suelo_z;
 
 // Cursor para no volver a mirar el mismo objeto. Sin esto, find() siempre
 // devuelve el primer objeto de cada clase y la prueba se queda enganchada
@@ -162,6 +172,17 @@ void() direkt_prethink_jugador =
 		direkt_test_agacha_paso = 0;
 		self.think = direkt_test_agacha;
 		self.nextthink = time + 0.1;
+	}
+	// El 23 pregunta si el jugador se apoya en algo. Es la sonda que usa el
+	// banco de pruebas del compilador de mapas: si el .bsp trae los clipnodes
+	// mal, el jugador atraviesa el suelo y aqui se ve caer.
+	else if (self.impulse == 23)
+	{
+		self.impulse = 0;
+		direkt_test_suelo_paso = 0;
+		direkt_test_suelo_z0 = self.origin[2];
+		self.think = direkt_test_suelo;
+		self.nextthink = time + 0.5;
 	}
 	else if (self.impulse)
 	{
@@ -666,6 +687,32 @@ void() direkt_test_arma =
 // Va con una cadena de thinks porque la caja se cambia en el prethink del frame
 // siguiente, y desde fuera no hay forma de sincronizarse con eso: mandando un
 // impulso y mirando a los dos segundos solo se veria el estado final.
+void() direkt_test_suelo =
+{
+	if (direkt_test_suelo_paso == 0)
+	{
+		direkt_test_suelo_paso = 1;
+		self.think = direkt_test_suelo;
+		self.nextthink = time + 0.5;
+		return;
+	}
+
+	direkt_test_suelo_dz = self.origin[2] - direkt_test_suelo_z0;
+	if (direkt_test_suelo_dz > 4)
+		localcmd(" echo DIREKT: el jugador esta en el aire, cayendo");
+	else if (direkt_test_suelo_dz < -4)
+		localcmd(" echo DIREKT: el jugador esta subiendo");
+	else
+		localcmd(" echo DIREKT: el jugador esta apoyado en el suelo");
+
+	// dprint va a la consola del motor, que es justo donde se mira el log.
+	direkt_test_suelo_z = self.origin[2];
+	dprint("DIREKT: altura z = ");
+	dprint(ftos(direkt_test_suelo_z));
+	dprint("\n");
+	self.think = SUB_Null;
+};
+
 void() direkt_test_agacha =
 {
 	if (direkt_test_agacha_paso == 0)

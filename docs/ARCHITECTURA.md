@@ -309,6 +309,42 @@ silencio**.
   arbitraria de memoria. Por eso un compilador propio necesita un validador
   propio: no hay red debajo.
 
+#### El bobinado va en espejo respecto al plano
+
+**Las caras que se ven tienen el bobinado en espejo de su plano**, no alineado.
+Medido sobre `start.bsp` de LibreQuake: las 529 caras cuyo plano apunta hacia el
+espectador tienen todas el bobinado opuesto a ese plano (el motor voltea el plano
+de las caras con `side = 1`, y la relación se mantiene).
+
+Con el bobinado alineado con el plano, el motor hace exactamente lo contrario de
+lo que parece: el test de cara trasera del shader de cómputo (`dot(plane.xyz,
+vieworg) < plane.w` en `cull/mark`) **aprueba** las caras correctas, se escriben
+sus índices, y al rasterizar caen del lado equivocado y **no se ve nada del
+mundo**. Ni un error, ni un aviso: solo el HUD. Por eso `write.c` recorre los
+vértices al revés al sacar los surfedges.
+
+#### El plano de un nodo y sus hijos tienen que ser coherentes
+
+`children[0]` es el lado **positivo** del plano del nodo. Si al partir resulta que
+un lado queda vacío y hay que voltear el plano, hay que voltear la variable de la
+que salen **las dos cosas**: el plano que se guarda en el nodo *y* el con el que
+se recortan las regiones de los dos hijos.
+
+Voltear solo el índice deja el nodo diciendo una cosa y sus hijos siendo la otra.
+El motor recorre el árbol con los planos de los nodos, así que a partir de ahí
+cualquier punto cae en la hoja equivocada (el jugador, dentro de una habitación,
+en la hoja de un muro) y el mundo no se dibuja. Por eso `build_tree` voltea
+`split` entero y no solo `planenum`.
+
+#### La región de una hoja es un poliedro, no una caja
+
+La región es la intersección de los planos del camino. Llevarla como caja
+envolvente (que es más grande) rompe dos cosas a la vez: el contenido de la hoja
+se decide mal (una hoja dentro de un muro sale `EMPTY`) y el verificador del
+invariante avisa siempre, porque para cualquier brush hay un plano del que la
+caja ni cabe entera ni queda entera fuera. Con los vértices de verdad las dos
+comparaciones son exactas.
+
 ### 4.4 Brush-entities: el `origin` no se deriva
 
 En los `.bsp` de LibreQuake, **ninguna** brush-entity lleva clave `"origin"`,
@@ -368,6 +404,37 @@ descubrirlos.
 
 ---
 
+## El paquete portable
+
+`make portable` deja `build/direkt-portable.tar.gz` con lo justo para jugar sin
+compilar nada:
+
+```
+direkt-portable/
+  bin/          ironwail, direkt-bsp, direkt-edit
+  direkt/       progs.dat (la logica de juego)
+  datos/        el directorio de LibreQuake tal cual
+  fuente/       src, game, scripts, tools, docs, patches, ci, Makefile
+  fuente/cache/ el tarball del motor CON su SHA-256
+  direkt.sh     lanzador
+  FUENTE-DEL-PAQUETE.txt
+```
+
+`direkt.sh` es `jugar` (por defecto), `test`, `editor`, `bsp` y `shell`.
+
+Tres cosas que no son obvias:
+
+- **El fuente va entero.** El binario es GPL y el directorio de datos tambien
+  (lleva `pop.lmp` dentro de `pak1.pak`), asi que un GPL necesita su fuente
+  delante. El tarball del motor va con su SHA-256 para que `make engine`
+  funcione dentro del paquete sin red.
+- **`DIREKT_GAMEDIR` lo pone el lanzador.** El generador de `.bsp` saca las
+  texturas de ahi; en el repositorio mira en `build/lq/full/id1`, que en el
+  paquete no existe, y sin la variable el `.bsp` sale sin lump TEXTURES.
+- **El motor no se para con `-quit`.** Hay que esperarlo a que el mundo este
+  listo mirando el log y mandarle `SIGTERM`, que es lo que hace
+  `run-headless.sh`. Con `-quit` se queda esperando para siempre.
+
 ## 6. Licencias
 
 El detalle completo está en `THIRD_PARTY.md`. Lo que no se puede perder de vista
@@ -384,3 +451,174 @@ al empaquetar:
   alfabético, con `patch -p1 --forward` y marcador `.patches-applied`. El
   target `make patch-refresh` regenera el motor. Ahora mismo `patches/` está
   vacío y no se aplica nada.
+
+## El generador de `.bsp` (`src/`)
+
+Ironwail no trae compilador de mapas y LibreQuake no publica sus `.map`, así que
+`direkt-bsp` los escribe desde cero. Reparto:
+
+| Fichero | De qué se ocupa |
+|---|---|
+| `src/common.c` | memoria, vectores, planos, windings, brushes |
+| `src/map.c` | parser del `.map` clásico |
+| `src/brush.c` | división de windings y brushes, sección convexa |
+| `src/compile.c` | registro de planos, árbol BSP, caras, texinfos |
+| `src/clip.c` | las tres dilataciones de colisión |
+| `src/write.c` | escritura del BSP29 y `check_bsp` |
+| `src/main.c` | `--info`, `--check`, compilación |
+
+### Decisiones que no son obvias
+
+**El árbol de clipnodes va en preorden.** `gl_model.c:2521` usa `headnode[j]`
+como `firstclipnode` y `world.c:668` aborta con `bad node number` en cuanto un
+hijo tiene índice menor. O sea: el padre tiene que ir **antes** que sus hijos.
+Con el orden natural de una recursión (crear el nodo, luego recursionar) el
+padre salía el último del bloque y la primera consulta reventaba.
+
+**La dilatación es hacia `lo - hmax` y `hi - hmin`.** El motor llama a
+`SV_HullPointContents` con el *origen* del jugador, no con su caja. La caja es
+`p + [hmin, hmax]`, así que se solapa con el semiplano `dot(n,x) <= d` cuando
+`dot(n,p) + minH <= d`, es decir, el semiplano dilatado es `dot(n,p) <= d - minH`
+con `minH = Σ (n_k > 0 ? hmin_k : hmax_k) · n_k`. Con `maxH` y sumando —que es lo
+intuitivo— la brush crece hacia el lado equivocado: el suelo se dilataba hasta
+`z=32` en vez de `z=24` y el jugador quedaba medio metro dentro de él al andar.
+
+**La coordenada de un plano alineado es `dist · normal`, no `dist`.** Un plano
+con normal `(0,0,-1)` y `dist 40` está en `z = -40`. Guardar `dist` tal cual
+refleja los planos "hacia abajo" y el árbol deja de partir donde toca.
+
+**`region_touches` necesita el punto *más cercano* al plano, no el más lejano.**
+Para saber si una región está *fuera* de una brush, la pregunta es si para
+algún plano todo el interior posible de la región queda por encima, o sea, si
+`box_min >= d`. Con `box_max` se estaba comprobando si la región entera queda
+*dentro* del semiplano, que no dice absolutamente nada.
+
+**Los cinco parámetros de cara de un `.map` son `xoff yoff rot xscale yscale`.**
+No `xscale yscale xoff yoff rot`, que es el orden que parece natural. Es un
+error muy traicionero porque casi todos los mapas traen `textura 0 0 0 1 1`:
+leído en el orden equivocado eso da escala 0 en los dos ejes, y una escala 0
+deja los ejes de textura **nulos**. De ahi sale todo lo demás: los `texinfo`
+deduplican entre sí y un mapa entero se queda con 2 o 3 en vez de 18, los
+`extents` del lightmap salen de 1000 unidades de lado, y las superficies se
+pintan negras o directamente no se pintan. Una escala 0 se trata como 1, que es
+lo que hacen las herramientas.
+
+**El plano de reparto es la mediana, no el primero que valga.** Elegir la
+mediana de las coordenadas que cortan la región equilibra el árbol sola y
+elimina el libro de planos "usados". Ese libro era el punto donde se colaban los
+errores: un flag que se quedaba a 1 tras el primer plano descartaba todos los
+siguientes, y `mejor = -1` en la elección de eje leía `por_eje[-1]`, y según lo que
+hubiera ahí el eje X llegaba a no partirse nunca.
+
+**`dsnode_t` no es todo `int32`.** `firstface` y `numfaces` son `uint16` en los
+offsets 20 y 22, y `children` son `int16` en 4 y 6. Leerlos como enteros de 4
+bytes devuelve números absurdos y hace que un validador dé falsos positivos.
+
+**El lump `dheader_t` no lleva `mins`/`maxs`.** Son 124 bytes exactos:
+`version` (4) más 15 lumps de 8. Los límites del mapa están en el lump
+`dmodel`, como `float`, y el árbol de colisión arranca en los límites **sin
+recortar 256 unidades por lado**, que no son los mismos.
+
+### Cómo se comprueba
+
+`scripts/bsp-test.sh` tiene cinco capas, y la última es la que de verdad importa:
+
+1. Los tres `.map` de `src/test` compilan.
+2. `--check` valida el fichero escrito: offsets, tamaños múltiplos, `planenum`,
+   hijos, ciclos y nodos inalcanzables. Además se comprueba que el validador
+   **falla** con un `.bsp` corrupto a propósito, porque un validador que se
+   traga cualquier cosa no vale para nada.
+3. `scripts/hullcheck.py` replica `SV_RecursiveHullCheck` al detalle —
+  incluida la conversión de las hojas (`if (children[i] >= count) -= 65536`) y
+  la regla `plane->type < 3` que hace que las normales de eje negativo usen
+  producto escalar— y compara con la respuesta correcta calculada a partir de
+  las brushes dilatadas. 20 puntos por mapa, 0 discrepancias.
+4. El motor carga el mapa, el jugador se apoya (`FL_ONGROUND`), anda y lo
+  paran los muros. Impulso 23 en `game/qc/player.qc` es la sonda que mira si la
+  altura deja de bajar.
+
+## El editor (`src/ed_*.c`)
+
+Tres capas, separadas por lo que se puede probar sin pantalla:
+
+| Capa | Sabe de | Fichero |
+|---|---|---|
+| documento | nada grafico | `src/ed_doc.c` |
+| vista | matematicas | `src/ed_view.c` |
+| ventana | SDL2 y OpenGL | `src/ed_gui.c` |
+| texturas de la vista | atlas para OpenGL 1.2 | `src/edtex.c` |
+
+El nucleo de geometria, `.map` y compilacion (`common.c`, `brush.c`, `map.c`,
+`compile.c`, `clip.c`, `write.c`) lo comparten `direkt-bsp` y `direkt-edit`.
+Cada uno anade su `main` y lo suyo encima; el `Makefile` lista los ficheros de
+cada binario en vez de usar un glob, porque un glob se lleva tambien los `main`
+del otro y los dos acaban con dos puntos de entrada.
+
+### Convenciones que hay que respetar
+
+**La vista pinta con las texturas de verdad, no con colores.** `edtex.c` junta en
+una sola imagen las texturas que usa el documento (OpenGL 1.2 solo tiene una
+textura por unidad) y cada cara se pinta con su casilla. Dos cosas lo hacen
+funcionar:
+
+- Las coordenadas salen de `brush_side_axes`, la **misma** función que rellena
+  `texinfo_t.vecs` en el compilador. Si el editor se calculara los ejes por su
+  cuenta, el mapa se vería de una manera aquí y de otra en el juego, y el
+  editor estaría mintiendo sobre lo que se va a ver.
+- La casilla se consigue **desplazando la coordenada**, no quedándose con la
+  parte fraccionaria. Un mapa tiene coordenadas enteras y con los ejes unitarios
+  las coordenadas de textura también, así que su parte fraccionaria es siempre
+  0 y todas las caras salían de un solo texel. El juego repite la textura cada
+  unidad de mundo y lo hace dejando crecer la coordenada (`GL_REPEAT`).
+
+**En OpenGL la y crece hacia arriba y (0,0) es la esquina inferior izquierda.**
+Al reves que en una ventana. El HUD coloca el panel de ayuda desde la altura de
+la ventana hacia abajo y la barra de estado desde `y=0` hacia arriba.
+
+**`glTexCoord2f` va antes que `glVertex3f`.** En el modo inmediato cada
+coordenada de textura se aplica al vértice *siguiente*, no al anterior. Ponerla
+después deja cada vértice con la del anterior.
+
+**El culling necesita GL_BLEND para el alfa.** `glColor4f` con alfa y sin
+`glEnable(GL_BLEND)` dibuja opaco: el panel de la ayuda sale negro y tapa la
+escena entera.
+
+**`glMatrixMode` hay que restaurarlo.** El HUD deja el modo en `GL_PROJECTION`;
+la escena de al fotograma siguiente tiene que volver a `GL_MODELVIEW` o la
+matriz de vista se carga en la de proyeccion y no se ve nada.
+
+**`winding_reverse` copia, no invierte in situ.** Devuelve una winding nueva.
+Los dos mecanismos conviven en el arbol: `brush_split` la usa, y el que la
+ignora se queda con las normales al reves.
+
+**El estado de una brush-entity es su `origin`, y el editor lo reescribe.**
+Ver la nota del README: el motor no lo deduce de las brushes.
+
+### Reparto de la propiedad de las brushes
+
+Este es el punto mas delicado de todo el nucleo, y estava sin documentar:
+
+- `parse_map` deja el mapa como dueno de todas sus brushes.
+- `compile_map` **se las queda**: separa las del mundo en un arreglo, monta la
+  lista del arbol con ese arreglo, y pone a cero las listas de brushes del mapa.
+  Asi `free_map` ya no las toca y no hay doble free.
+- Las brushes moviles las suelta `compile_map` mismo, porque todavia no se
+  compilan.
+- `free_bsp` suelta las brushes que quedaron colgando de las hojas.
+
+El codigo anterior colgaba cada brush de la lista del mundo con `->next` sin
+más, lo que dejaba cada entidad apuntando a la brush siguiente de otra entidad:
+`free_map` podia liberar dos veces la misma. Ver `prepare()` en `clip.c`, que
+tiene el mismo patron con los arrays estaticos por hull, y `brush_free`, que
+tiene que soltar el `xstrdup` de la textura de cada cara.
+
+### Pruebas
+
+- `direkt-edit --selftest`: 40 pruebas de documento, ida y vuelta del `.map`,
+  picking por rayo, arrastre de caras, deshacer, y que un mapa hecho en el
+  editor compile a un `.bsp` que pasa `check_bsp`. Sin pantalla.
+- `scripts/editor-test.sh`: lo anterior mas el dibujo. Dibuja un fotograma a un
+  PPM y **comprueba que hay pixeles distintos del fondo**: el fallo tipico (el
+  contexto GL se crea bien, la matriz se carga en el sitio equivocado) da una
+  imagen totalmente negra sin decir nada.
+- AddressSanitizer sobre el selftest: cero fugas y cero doble free.

@@ -1,0 +1,25 @@
+// Caja solida de 64 unidades. Prueba minima del compilador: planos, arbol,
+// caras y textura. Los parametros de eje se omiten a proposito, que es lo
+// mas comun en un .map: el valor por defecto es escala 1 y desplazamiento 0.
+{
+"classname" "worldspawn"
+"wad" "gfx.wad"
+{
+( 64 0 0 )( 64 64 0 )( 64 64 64 )( 64 0 64 ) wall1
+( 0 0 0 )( 0 0 64 )( 0 64 64 )( 0 64 0 ) wall1
+( 0 64 0 )( 0 64 64 )( 64 64 64 )( 64 64 0 ) wall1
+( 0 0 0 )( 64 0 0 )( 64 0 64 )( 0 0 64 ) wall1
+( 0 0 64 )( 64 0 64 )( 64 64 64 )( 0 64 64 ) wall1
+( 0 0 0 )( 0 64 0 )( 64 64 0 )( 64 0 0 ) wall1
+}
+}
+{
+"classname" "info_player_start"
+"origin" "-224 -224 -32"
+"angle" "90"
+}
+{
+"classname" "light"
+"origin" "32 32 96"
+"light" "300"
+}
