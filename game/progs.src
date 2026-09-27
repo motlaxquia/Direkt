@@ -1,0 +1,22 @@
+// Punto de entrada de la compilacion de la logica de Direkt.
+//
+// Se compila desde game/ con:
+//     fteqcc progs.src
+// y #pragma progs_dat decide donde cae el .dat resultante.
+
+#pragma progs_dat "../direkt/progs.dat"
+
+#includelist
+
+qc/defs.qc
+qc/assets.qc
+qc/subs.qc
+qc/entities.qc
+qc/structure.qc
+qc/items.qc
+qc/weapons.qc
+qc/player.qc
+qc/client.qc
+qc/direkt.qc
+
+#endlist

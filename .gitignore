@@ -1,0 +1,33 @@
+# Todo lo descargado / generado vive en build/
+build/
+*.log
+
+# Binarios sueltos
+fteqcc
+fteqcc.log
+*.o
+*.a
+
+# Salvados de Quake / estado de ejecucion
+cfg/
+screenshots/
+*.dem
+*.sav
+
+# El pak y los bsp de LibreQuake son BSD-3 pero se descargan, no se versionan
+*.pak
+build/lq/
+
+# Python
+__pycache__/
+*.pyc
+
+# Logica de juego compilada: se genera con 'make game'
+direkt/progs.dat
+direkt/progs.lno
+game/progs.lno
+game/progs.dat
+game/*.o
+
+# Configuracion y estado que escribe el motor al arrancar
+direkt/direkt-test.cfg
