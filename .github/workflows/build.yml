@@ -118,7 +118,7 @@ jobs:
       # grafica, asi que aqui no se prueba el arranque del motor: se prueba
       # todo lo que no necesita ventana. El arranque se prueba en linux.
       - name: Pruebas que no necesitan ventana
-        run: make bsp-test editor-test
+        run: make bsp-test editor-test BSP_TEST_ARGS=--sin-motor
 
       - name: Paquete
         run: make portable DIREKT_OS=macos
@@ -190,7 +190,7 @@ jobs:
 
       - name: Pruebas que no necesitan ventana
         shell: msys2 {0}
-        run: make bsp-test editor-test
+        run: make bsp-test editor-test BSP_TEST_ARGS=--sin-motor
 
       - name: Paquete
         shell: msys2 {0}

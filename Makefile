@@ -160,9 +160,15 @@ shot: game
 	@$(REPO)/scripts/run-headless.sh --map $(MAP) --settle $(SETTLE) --min-lit $(MIN_LIT) --shot
 
 # El smoke test necesita el motor, las dos variantes de progs.dat y los datos.
+#
+# BSP_TEST_ARGS va vacio en Linux, donde si hay pantalla para arrancar el motor.
+# En macOS y en un runner de Windows no la hay, y se pasa --sin-motor para que
+# bsp-test se quede en las pruebas que no necesitan ventana.
+BSP_TEST_ARGS ?=
+
 test: engine game game-noshowcase bsp edit
 	@$(REPO)/scripts/smoke-test.sh
-	@$(REPO)/scripts/bsp-test.sh
+	@$(REPO)/scripts/bsp-test.sh $(BSP_TEST_ARGS)
 	@$(REPO)/scripts/editor-test.sh
 
 # ------------------------------------------------- compilador de mapas (.bsp)
@@ -224,7 +230,7 @@ $(EDIT_BIN): $(EDIT_SRC) $(addprefix $(REPO)/src/,$(CORE_HDR) $(EDIT_HDR))
 
 # bsp-test compila un mapa de prueba, lo valida y comprueba la colision.
 bsp-test: $(BSP_BIN)
-	@$(REPO)/scripts/bsp-test.sh
+	@$(REPO)/scripts/bsp-test.sh $(BSP_TEST_ARGS)
 
 # editor-test prueba el documento sin pantalla y dibuja un fotograma con Xvfb.
 editor-test: $(EDIT_BIN)
