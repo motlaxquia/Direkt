@@ -58,6 +58,20 @@ jobs:
       - name: Paquete
         run: make portable
 
+      # Las capturas se suben siempre, tambien si las pruebas fallan. Sin ellas
+      # un fallo de render en CI no se puede investigar: solo dice "la diferencia
+      # de brillo es 0", que no dice si el mapa esta negro, si la captura salio
+      # antes de tiempo o si el punto de mira es otro.
+      - name: Capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-linux
+          path: |
+            build/shots/*.png
+            build/logs/*.log
+          if-no-files-found: ignore
+
       - name: Adjuntar a la release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -148,7 +162,7 @@ jobs:
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-SDL2
-            mingw-w64-x86_64-opengl
+            mingw-w64-x86_64-mesa
             zip
 
       - uses: actions/cache@v4
