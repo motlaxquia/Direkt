@@ -13,6 +13,11 @@
 #   make clean / distclean
 
 SHELL := /bin/bash
+
+# Sistema en el que se esta compilando. "uname -s" da Linux, Darwin o MINGW64_NT,
+# y lo que interesa es la familia: darwin son los Mac y lo demas es Linux o
+# Windows. Se usa para enlazar con el OpenGL que toque y para nombrar el paquete.
+OS_DETECT := $(shell uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/^darwin$$/macos/')
 # .SHELLFLAGS es de GNU Make 4.0. El make de serie de macOS es el 3.81 y no lo
 # tiene, asi que en macOS hay que instalar make con brew; en MSYS2, pacman.
 .SHELLFLAGS := -eu -o pipefail -c
@@ -145,11 +150,6 @@ run-edit: edit
 # El portable es lo que se puede pasar a alguien: los tres binarios, los datos y
 # el fuente entero. El fuente va porque el binario es GPL (ver THIRD_PARTY.md),
 # y el tarball del motor tambien, para que se pueda recompilar sin red.
-# El paquete lleva el nombre del sistema destino, porque hay tres y la pagina
-# web tiene que poder ofrecer el de cada uno. En Linux sale .tar.gz y en Windows
-# .zip, que es lo que abre el explorador de archivos sin preguntar nada.
-OS_DETECT := $(shell uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/^darwin$$/macos/')
-OS_TARGET := $(or $(DIREKT_OS),$(OS_DETECT),linux)
 PORTABLE := $(BUILD)/direkt-portable-$(OS_TARGET).tar.gz
 
 portable: engine game bsp edit
@@ -183,7 +183,14 @@ BSP_MAP   ?= $(REPO)/src/test/habitacion.map
 EDIT_SRC  := $(addprefix $(REPO)/src/,$(CORE_SRC) ed_doc.c ed_view.c ed_gui.c \
                               edtex.c ed_test.c ed_main.c)
 EDIT_HDR  := editor.h ed_view.h ed_gui.h edtex.h
-EDIT_LIBS := $(shell pkg-config --libs sdl2 2>/dev/null) -lGL -lm
+# -lGL solo existe en Linux y en Windows con MinGW. En macOS el OpenGL es un
+# framework del sistema y se enlaza con -framework OpenGL.
+ifeq ($(OS_DETECT),macos)
+EDIT_GL := -framework OpenGL -framework Cocoa
+else
+EDIT_GL := -lGL
+endif
+EDIT_LIBS := $(shell pkg-config --libs sdl2 2>/dev/null) $(EDIT_GL) -lm
 
 bsp: $(BSP_BIN)
 
