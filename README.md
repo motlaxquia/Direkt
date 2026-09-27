@@ -33,7 +33,7 @@ cd direkt-portable-linux
 SHA-256 del paquete:
 
 ```
-fb52f93097022e1fc92493d3dd3519fd86bc13b2d5a286b3bcd42647f39959ff  direkt-portable-linux.tar.gz
+10568790fcf144e8f6a4c40d47a9ad9351c7252fe801771886fea2a4db03bf8a  direkt-portable-linux.tar.gz
 ```
 
 **El motor pide OpenGL 4.3**, porque dibuja el mundo con *compute shaders*. En

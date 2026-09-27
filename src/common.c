@@ -7,10 +7,20 @@
 #include "direktbsp.h"
 
 #include <math.h>
+#include <stdint.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* getpid: en Unix esta en unistd.h y en Windows en process.h. MinGW trae las dos
+ * cosas, asi que se incluyen las dos y el que no exista no molesta porque se
+ *Compila esto en los tres sistemas. */
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 /* ------------------------------------------------------------------ memoria */
 
@@ -367,4 +377,57 @@ void brush_bounds(brush_t *b, vec3_t mins, vec3_t maxs)
 		for (j = 0; j < 3; j++)
 			mins[j] = maxs[j] = 0;
 	}
+}
+
+/* Crea un fichero temporal y deja la ruta en buf, que tiene que tener sitio
+ * para TMP_PATH_MAX. Devuelve 1 si se pudo, 0 si no.
+ *
+ * Sustituye a mkstemp con "/tmp/direkt-XXXXXX", que solo funciona en Linux: en
+ * macOS /tmp existe pero mkstemp puede faltar segun como se compile, y en
+ * Windows no hay /tmp. Ahi las pruebas del editor fallaban al releer un
+ * documento y al compilar un mapa, porque los temporales nunca se creaban.
+ *
+ * El nombre lleva el pid y un contador, de modo que dos procesos a la vez, o
+ * dos llamadas seguidas en el mismo, no se pisan. Se abre en modo "w+b", que
+ * crea o vacia, asi que aunque el nombre existiera no heredaria contenido
+ * ajeno. */
+int temp_file(char *buf, size_t n, const char *tag)
+{
+	const char *dir = NULL;
+	const char *env;
+	static unsigned counter;
+	FILE *f;
+	int intento;
+
+	/* El directorio temporal cambia de nombre segun el sistema: TMPDIR en
+	 * Unix, TEMP y TMP en Windows, y P_tmpdir como ultimo recurso. */
+	env = getenv("TMPDIR");
+	if (env && *env)
+		dir = env;
+#ifdef P_tmpdir
+	if (!dir) {
+		env = getenv("TEMP");
+		if (env && *env)
+			dir = env;
+		env = getenv("TMP");
+		if (env && *env)
+			dir = env;
+		dir = P_tmpdir;
+	}
+#endif
+	if (!dir || !*dir)
+		dir = ".";
+
+	/* Se prueban varios porque el nombre puede existir ya, aunque lo normal es
+	 * que el pid bastara. */
+	for (intento = 0; intento < 64; intento++) {
+		unsigned n2 = (unsigned)(size_t)getpid() * 2654435761u + counter++ + (unsigned)intento;
+		snprintf(buf, n, "%s/direkt-%s-%d-%u.tmp", dir, tag, (int)getpid(), n2 % 100000u);
+		f = fopen(buf, "w+b");
+		if (f) {
+			fclose(f);
+			return 1;
+		}
+	}
+	return 0;
 }

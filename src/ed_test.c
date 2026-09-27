@@ -135,11 +135,15 @@ static void test_roundtrip(const char *origen)
 	t1 = save_map_to_string(a->map);
 
 	b = ed_doc_new();
-	/* Se escribe a disco porque el parser es de fichero. */
+	/* Se escribe a disco porque ed_doc_load lee de fichero. */
 	{
-		char tmp[] = "/tmp/direkt-rt-XXXXXX";
-		int fd = mkstemp(tmp);
-		FILE *f = fdopen(fd, "wb");
+		char tmp[TMP_PATH_MAX];
+		FILE *f;
+		if (!temp_file(tmp, sizeof tmp, "rt"))
+			error("no se puede crear el temporal de la ida y vuelta");
+		f = fopen(tmp, "wb");
+		if (!f)
+			error("no se puede escribir el temporal de la ida y vuelta");
 		fwrite(t1, 1, strlen(t1), f);
 		fclose(f);
 		ed_doc_free(b);
@@ -372,13 +376,11 @@ static void test_compile(void)
 {
 	ed_doc_t *d = ed_doc_new();
 	entity_t *e;
-	char tmp[] = "/tmp/direkt-ed-XXXXXX";
-	int fd;
+	char tmp[TMP_PATH_MAX];
 	FILE *f;
 	map_t *m;
 	bsp_t *bsp;
-	char bspf[] = "/tmp/direkt-ed-XXXXXX";
-	int fb;
+	char bspf[TMP_PATH_MAX];
 
 	printf("\n\033[1m7. Un mapa hecho en el editor compila\033[0m\n");
 
@@ -391,8 +393,11 @@ static void test_compile(void)
 	ed_add_box(d, NULL, (float[]){-16, 256, 0}, (float[]){256, 272, 128}, "notexture");
 	e = ed_add_entity(d, "info_player_start", (float[]){32, 32, 32});
 
-	fd = mkstemp(tmp);
-	f = fdopen(fd, "wb");
+	if (!temp_file(tmp, sizeof tmp, "ed") || !temp_file(bspf, sizeof bspf, "bsp"))
+		error("no se puede crear el temporal del mapa de prueba");
+	f = fopen(tmp, "wb");
+	if (!f)
+		error("no se puede escribir el temporal del mapa de prueba");
 	{
 		char *texto = save_map_to_string(d->map);
 		fputs(texto, f);
@@ -410,8 +415,6 @@ static void test_compile(void)
 	check(bsp != NULL && bsp->numnodes > 0, "el .map se compila (%d nodos)",
 	      bsp ? bsp->numnodes : 0);
 
-	fb = mkstemp(bspf);
-	close(fb);
 	check(write_bsp(bspf, bsp, m) == 0, "el .bsp se escribe");
 	check(check_bsp(bspf) == 0, "el .bsp pasa el validador");
 
