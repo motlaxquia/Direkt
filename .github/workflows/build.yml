@@ -120,6 +120,20 @@ jobs:
       - name: Pruebas que no necesitan ventana
         run: make bsp-test editor-test BSP_TEST_ARGS=--sin-motor EDITOR_TEST_ARGS=--sin-x
 
+      # El log del editor se enseña siempre. Si el .exe no arranca por una DLL
+      # que falta, en Windows no dice nada: solo sale con codigo distinto de
+      # cero, y el banco solo puede poner "FALLA" sin mas.
+      - name: Log del editor
+        if: always()
+        shell: bash
+        run: |
+          echo "--- build/bin:"
+          ls -l build/bin || true
+          echo "--- salida de --selftest:"
+          cat build/editor-selftest.out || echo "(no hay log)"
+          echo "--- salida de --selftest con el mapa de entrada:"
+          cat build/editor-rt.out || echo "(no hay log)"
+
       - name: Paquete
         run: make portable DIREKT_OS=macos
 
@@ -195,6 +209,20 @@ jobs:
       - name: Pruebas que no necesitan ventana
         shell: msys2 {0}
         run: make bsp-test editor-test BSP_TEST_ARGS=--sin-motor EDITOR_TEST_ARGS=--sin-x
+
+      # El log del editor se enseña siempre. Si el .exe no arranca por una DLL
+      # que falta, en Windows no dice nada: solo sale con codigo distinto de
+      # cero, y el banco solo puede poner "FALLA" sin mas.
+      - name: Log del editor
+        if: always()
+        shell: msys2 {0}
+        run: |
+          echo "--- build/bin:"
+          ls -l build/bin || true
+          echo "--- salida de --selftest:"
+          cat build/editor-selftest.out || echo "(no hay log)"
+          echo "--- salida de --selftest con el mapa de entrada:"
+          cat build/editor-rt.out || echo "(no hay log)"
 
       - name: Paquete
         shell: msys2 {0}

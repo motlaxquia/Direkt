@@ -59,7 +59,7 @@ mkdir -p "$SHOTS" "$BUILD/logs"
 
 # --------------------------------------------------------------- 1. selftest
 head_ "1. La logica de edicion, sin pantalla"
-if "${EDIT_RUN[@]}" "$EDIT" --selftest >"$BUILD/editor-selftest.out" 2>&1; then
+if ${EDIT_RUN[@]+"${EDIT_RUN[@]}"} "$EDIT" --selftest >"$BUILD/editor-selftest.out" 2>&1; then
   pass "el selftest del editor pasa entero"
   grep -E "pasan" "$BUILD/editor-selftest.out" | sed 's/^/        /'
 else
@@ -166,7 +166,7 @@ done
 
 # El selftest con un mapa de entrada hace la ida y vuelta de verdad: escribe,
 # relee y compara el texto.
-if "${EDIT_RUN[@]}" "$EDIT" --selftest "$REPO_ROOT/src/test/habitacion.map" \
+if ${EDIT_RUN[@]+"${EDIT_RUN[@]}"} "$EDIT" --selftest "$REPO_ROOT/src/test/habitacion.map" \
      >"$BUILD/editor-rt.out" 2>&1; then
   pass "ida y vuelta de .map: el texto guardado es identico al releido"
 else
