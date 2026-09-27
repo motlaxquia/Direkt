@@ -1,6 +1,6 @@
 --- a/CMakeLists.txt	2026-09-27 18:35:59.666922698 +0000
-+++ b/CMakeLists.txt	2026-09-27 18:35:59.669922698 +0000
-@@ -61,7 +61,32 @@
++++ b/CMakeLists.txt	2026-09-27 18:50:03.079961797 +0000
+@@ -61,7 +61,39 @@
  endif()
  
  add_executable(ironwail ${IWAIL_SRC})
@@ -29,6 +29,13 @@
 +		"-Wl,-rpath,@loader_path"
 +		"-Wl,-rpath,/usr/local/lib"
 +	)
++	# SDL_main.h en macOS renombra el main del programa a SDL_main, pensando que
++	# es SDL quien pone el main de verdad. Cuando el SDL2 es un dylib, como el
++	# de Homebrew, no hay nadie que lo ponga y el enlazado acaba con
++	#   Undefined symbols for architecture arm64: "_main"
++	# SDL_MAIN_HANDLED dice que el programa trae su propio main, que es lo que
++	# ya hacia falta en Windows (WinMain) pero aqui no estaba puesto.
++	target_compile_definitions(ironwail PRIVATE SDL_MAIN_HANDLED)
 +	set(ENABLE_USERDIRS TRUE CACHE STRING "Enable user directories")
 +elseif (UNIX)
  	target_link_libraries(ironwail PRIVATE m)

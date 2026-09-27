@@ -143,6 +143,9 @@ jobs:
       # En Windows no hay ni make ni gcc de serie. MSYS2 los trae, y ademas da
       # bash, que es lo que necesitan los scripts del repo.
       #
+      # patch viene de serie en Linux y en macOS, pero MSYS2 no lo trae, y sin
+      # el los parches de patches/ no se aplican.
+      #
       # El make que se pide es el de MSYS ("make"), no el de mingw
       # ("mingw-w64-x86_64-make"), porque el segundo instala un binario llamado
       # mingw32-make y el Makefile del repo llama a "make" a secas. El gcc si
@@ -163,6 +166,7 @@ jobs:
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-SDL2
             mingw-w64-x86_64-mesa
+            patch
             zip
 
       - uses: actions/cache@v4
