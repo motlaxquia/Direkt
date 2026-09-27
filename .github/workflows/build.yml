@@ -1,8 +1,8 @@
 name: compilar
 
-# Se dispara solo en push a main y en pull requests. Los tres sistemas se
-# compilan siempre, no solo cuando cambian ficheros de uno de ellos: el fallo
-# que duele es el que aparece en el sistema que no tocas nunca.
+# Se dispara en push a main y en pull requests. Los tres sistemas se compilan
+# siempre, no solo cuando cambian ficheros de uno de ellos: el fallo que duele
+# es el que aparece en el sistema que no tocas nunca.
 on:
   push:
     branches: [main]
@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Las tres dependencias externas van fijadas por SHA, asi que esto solo dice
-  # de donde sepillar, no que se fien de lo que haya ahi.
+  # Las dos dependencias externas van fijadas por SHA en fetch-deps.sh, asi que
+  # esto no decide de donde se fia, solo evita que apt pregunte.
   DEBIAN_FRONTEND: noninteractive
 
 jobs:
@@ -27,6 +27,18 @@ jobs:
 
       - name: Dependencias del sistema
         run: scripts/setup-deps.sh
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            build/cache
+            build/lq
+          key: deps-${{ runner.os }}-${{ hashFiles('scripts/fetch-deps.sh') }}
+
+      # make engine no baja nada: depende de un sello que pone fetch-deps.sh, y
+      # sin este paso falla con "No rule to make target .patches-applied".
+      - name: Descargas
+        run: make deps
 
       - name: Motor
         run: make engine
@@ -60,12 +72,21 @@ jobs:
       # Homebrew ya viene en el runner. El make de serie es el 3.81, que no
       # entiende de .SHELLFLAGS, asi que se instala el de brew.
       #
-      # fteqcc no se instala aqui porque no esta en brew, y no hace falta: la
-      # logica de juego va ya compilada en progs.dat, que es bytecode y da igual
-      # en que sistema se compilo. En Linux, donde si hay fteqcc, se recompila.
+      # fteqcc no se instala: no esta en brew y no hace falta, porque progs.dat
+      # va versionado en el repo. Es bytecode, y el motor lo interpreta igual en
+      # los tres sistemas. En Linux, donde si hay fteqcc, se recompila igual.
       - name: Dependencias
-        run: |
-          brew install make cmake pkg-config sdl2
+        run: brew install make cmake pkg-config sdl2
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            build/cache
+            build/lq
+          key: deps-${{ runner.os }}-${{ hashFiles('scripts/fetch-deps.sh') }}
+
+      - name: Descargas
+        run: make deps
 
       - name: Motor
         run: make engine
@@ -73,7 +94,7 @@ jobs:
       - name: Generador, editor y datos
         run: make bsp edit data
 
-      # En macOS no hay Xvfb ni forma de tener un contexto de GL sin sesion
+      # En macOS no hay Xvfb ni forma de tener contexto de GL sin sesion
       # grafica, asi que aqui no se prueba el arranque del motor: se prueba
       # todo lo que no necesita ventana. El arranque se prueba en linux.
       - name: Pruebas que no necesitan ventana
@@ -96,28 +117,20 @@ jobs:
   windows:
     name: windows (msys2/mingw)
     runs-on: windows-latest
-    defaults:
-      run:
-        # El shell msys2 solo existe DESPUES de que este paso instala MSYS2.
-        # Por eso el primer paso va en pwsh, que si viene de serie.
-        shell: pwsh
     steps:
       - uses: actions/checkout@v4
 
       # En Windows no hay ni make ni gcc de serie. MSYS2 los trae, y ademas da
       # bash, que es lo que necesitan los scripts del repo.
       #
-      # MSYS2 se instala con su propia accion, que ademas deja disponible el
-      # shell "msys2 {0}" para los pasos siguientes. Por eso los pasos de aqui
-      # en adelante no llevan "shell:" y usan ese.
+      # El shell "msys2 {0}" no existe hasta que MSYS2 esta instalado, asi que
+      # los pasos que lo usan llevan su shell puesto de forma explicita. No se
+      # pone en defaults.run porque ese valor se aplica a todos los pasos del
+      # trabajo, incluidos los que son acciones.
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
-          # Se fija a false porque ya se ha instalado lo de mas abajo y porque
-          # un segundo "pacman -Syu" al empezar reinicia el shell y rompe el
-          # paso que lo esta usando.
-          release: false
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-make
@@ -125,6 +138,17 @@ jobs:
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-SDL2
             zip
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            build/cache
+            build/lq
+          key: deps-${{ runner.os }}-${{ hashFiles('scripts/fetch-deps.sh') }}
+
+      - name: Descargas
+        shell: msys2 {0}
+        run: make deps
 
       - name: Motor
         shell: msys2 {0}
