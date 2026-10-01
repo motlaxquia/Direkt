@@ -235,15 +235,20 @@ endif
 # el codigo de red de Windows nativo, que espera cabeceras de Winsock que GCC no
 # trae puestas, y salen errores de "implicit declaration of __WSAE_StrError".
 ifeq ($(OS_TARGET),windows)
+# Makefile.w64, que es el suyo para MinGW. Por defecto busca el SDL2 que lleva
+# incluido en el tarball, que aqui no se extrae, asi que se le dice que use el
+# del sistema, que en MSYS2 es sdl2-config.
 QS_MAKEFILE := Makefile.w64
+QS_SDL := SDL_CONFIG=sdl2-config
 else
 QS_MAKEFILE := Makefile
+QS_SDL :=
 endif
 
 $(QS_BIN): $(QS_STAMP)
 	@echo "==> Compilando quakespasm (motor de recursos bajos)"
 	@echo "    audio: vorbis=$(QS_VORBIS) mp3=$(QS_MP3) (lo que no exista se desactiva)"
-	@$(MAKE) -C $(QS_SRC) -f $(QS_MAKEFILE) USE_SDL2=1 WITH_SYSTEM_MDL=0 \
+	@$(MAKE) -C $(QS_SRC) -f $(QS_MAKEFILE) USE_SDL2=1 WITH_SYSTEM_MDL=0 $(QS_SDL) \
 		USE_CODEC_VORBIS=$(QS_VORBIS) USE_CODEC_MP3=$(QS_MP3) $(QS_MP3LIB)
 	@mkdir -p $(BIN)
 	@cp $(QS_SRC)/quakespasm$(EXE) $@
