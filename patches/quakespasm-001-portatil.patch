@@ -1,5 +1,5 @@
---- a/Quake/Makefile	2026-10-01 23:28:03.276242552 +0000
-+++ b/Quake/Makefile	2026-10-01 23:28:03.284242552 +0000
+--- orig/Quake/Makefile	2026-08-11 20:10:10.000000000 +0000
++++ new/Quake/Makefile	2026-10-01 23:37:20.562236789 +0000
 @@ -140,9 +140,16 @@
  endif
  ifeq ($(USE_CODEC_VORBIS),1)
@@ -17,74 +17,89 @@
  CFLAGS+= -DUSE_CODEC_MP3
  CODECLIBS+= $(lib_mp3dec)
  endif
-@@ -162,7 +169,16 @@
+@@ -162,7 +169,15 @@
  CFLAGS+= -DUSE_CODEC_UMX
  endif
  
 -ifeq ($(HOST_OS),haiku)
 +# En macOS el OpenGL no es una libreria sino un framework del sistema, y no hay
-+# libGL que enlazar: el enlazado falla con "ld: library 'GL' not found". En
-+# MacOSX el Makefile aparte resuelve el problema, pero el generic no lo hacia.
++# libGL que enlazar: el enlazado falla con "ld: library 'GL' not found".
++# Ademas, la aceleracion del raton de in_sdl.c usa IOKit, y en Apple Silicon eso
++# tampoco viene enlazado solo: falla con Undefined symbols for architecture
++# arm64: "_IOMasterPort". En MacOSX el Makefile aparte resuelve las dos cosas,
++# pero el generico no lo hacia.
 +ifeq ($(HOST_OS),darwin)
-+# Ademas del OpenGL, la aceleracion del raton de in_sdl.c usa IOKit, y en
-+# Apple Silicon eso tampoco viene enlazado solo: el enlazado falla con
-+# Undefined symbols for architecture arm64: "_IOMasterPort". Mismo problema que
-+# tenia Ironwail, que va resuelto en patches/ironwail-001.
 +COMMON_LIBS= -framework OpenGL -framework Cocoa -framework IOKit -framework CoreFoundation -lm
 +else ifeq ($(HOST_OS),haiku)
  COMMON_LIBS= -lGL
  else
  COMMON_LIBS= -lGL -lm
---- a/Quake/net_sys.h	2026-10-01 23:28:03.278242552 +0000
-+++ b/Quake/net_sys.h	2026-10-01 23:28:03.286242552 +0000
-@@ -160,6 +160,12 @@
+--- orig/Quake/net_sys.h	2026-08-11 20:10:10.000000000 +0000
++++ new/Quake/net_sys.h	2026-10-01 23:37:20.562236789 +0000
+@@ -160,10 +160,20 @@
  typedef int	socklen_t;
  #endif	/* socklen_t type */
  
 +/* __WSAE_StrError, que usa socketerror() mas abajo, sale de wsaerror.h, y el
-+ * comentario de al lado ya avisa de que hay que incluirla. No lo hacia nadie y
-+ * al compilar con MinGW salia "implicit declaration of function
-+ * __WSAE_StrError". Con MSVC el orden de inclusiones de casualidad lo tapaba. */
++ * comentario de al lado ya avisa de que hay que incluirla. No lo hacia nadie, y
++ * con MinGW salia "implicit declaration of function __WSAE_StrError". Con MSVC el
++ * orden de inclusiones lo tapaba por casualidad. */
 +#include "wsaerror.h"
 +
  typedef SOCKET	sys_socket_t;
  
  #define	selectsocket	select
---- a/Quake/main_sdl.c	2026-10-01 23:28:03.280242552 +0000
-+++ b/Quake/main_sdl.c	2026-10-01 23:28:03.288242552 +0000
-@@ -65,7 +65,14 @@
+-#define	IOCTLARG_P(x)	/* (u_long *) */ x
++
++/* ioctlsocket() quiere un u_long *, no un int *. La macro estaba definida aqui
++ * pero SIN conversion, y el resultado era "passing argument 3 of ioctlsocket
++ * from incompatible pointer type" al compilar con MinGW. */
++#define	IOCTLARG_P(x)	((u_long *) (x))
+ 
+ #define	SOCKETERRNO	WSAGetLastError()
+ #define	NET_EWOULDBLOCK		WSAEWOULDBLOCK
+--- orig/Quake/main_sdl.c	2026-08-11 20:10:10.000000000 +0000
++++ new/Quake/main_sdl.c	2026-10-01 23:37:20.562236789 +0000
+@@ -65,7 +65,13 @@
  
  // On OS X we call SDL_main from the launcher, but SDL2 doesn't redefine main
  // as SDL_main on OS X anymore, so we do it ourselves.
 -#if defined(USE_SDL2) && defined(__APPLE__)
-+//
-+// El "launcher" del que habla el comentario es el ejecutable del paquete .app,
-+// que es el que define main y llama a SDL_main. Al compilar un ejecutable a
-+// secas, como hace este proyecto, no hay nadie que defina main y el enlazado
-+// acaba con Undefined symbols for architecture arm64: "_main". Por eso solo se
-+// renombra si de verdad hay launcher, que se indica con
++// El "launcher" del que habla el comentario de arriba es el ejecutable del
++// paquete .app, que es el que define main y llama a SDL_main. Al compilar un
++// ejecutable a secas, como hace este proyecto, no hay nadie que defina main y el
++// enlazado acaba con Undefined symbols for architecture arm64: "_main".
++// Renombrar solo si hay launcher, que se avisa con
 +// QUAKESPASM_APPLE_BUNDLE_LAUNCHER. El Makefile no lo define.
 +#if defined(USE_SDL2) && defined(__APPLE__) && defined(QUAKESPASM_APPLE_BUNDLE_LAUNCHER)
  #define main SDL_main
  #endif
  
---- a/Quake/net_udp.c	2026-10-01 23:28:03.282242552 +0000
-+++ b/Quake/net_udp.c	2026-10-01 23:28:12.452242457 +0000
-@@ -72,8 +72,12 @@
+--- orig/Quake/net_udp.c	2026-08-11 20:10:10.000000000 +0000
++++ new/Quake/net_udp.c	2026-10-01 23:37:49.286236491 +0000
+@@ -72,8 +72,11 @@
  #endif
  		if (!(local = gethostbyname(buff)))
  		{
 +			// h_errno y hstrerror son de Haiku y de Unix, y en Windows no
-+			// existen: SOCKETERRNO y socketerror() los define net_sys.h por
-+			// plataforma. Con hstrerror, al compilar con MinGW, salia
-+			// implicit declaration of function hstrerror.
++			// existen. SOCKETERRNO y socketerror() los define net_sys.h por
++			// plataforma, que es lo que toca usar aqui.
  			Con_SafePrintf("UDP_Init: WARNING: gethostbyname failed (%s)\n",
 -						hstrerror(h_errno));
 +						socketerror(SOCKETERRNO));
  		}
  		else if (local->h_addrtype != AF_INET)
  		{
-@@ -270,7 +274,10 @@
+@@ -169,7 +172,7 @@
+ 		return INVALID_SOCKET;
+ 	}
+ 
+-	if (ioctlsocket (newsocket, FIONBIO, &_true) == SOCKET_ERROR)
++	if (ioctlsocket (newsocket, FIONBIO, IOCTLARG_P (&_true)) == SOCKET_ERROR)
+ 		goto ErrorReturn;
+ 
+ 	memset(&address, 0, sizeof(struct sockaddr_in));
+@@ -270,7 +273,10 @@
  	if (net_acceptsocket == INVALID_SOCKET)
  		return INVALID_SOCKET;
  
@@ -92,7 +107,7 @@
 +	// ioctlsocket y no ioctl: en Windows la llamada se llama asi, y el mensaje de
 +	// error de mas abajo ya lo decia. net_sys.h define ioctlsocket como ioctl en
 +	// Unix, de modo que el nombre vale para los dos.
-+	if (ioctlsocket (net_acceptsocket, FIONREAD, &available) == -1)
++	if (ioctlsocket (net_acceptsocket, FIONREAD, IOCTLARG_P (&available)) == -1)
  	{
  		int err = SOCKETERRNO;
  		Sys_Error ("UDP: ioctlsocket (FIONREAD) failed (%s)", socketerror(err));
