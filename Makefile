@@ -210,9 +210,17 @@ QS_BIN   := $(BIN)/quakespasm$(EXE)
 
 quakespasm: $(QS_BIN)
 
+# En macOS el MP3 se decodifica con mpg123 y no con libmad, que Homebrew ya no
+# tiene. Los codecs de onda los pone el propio SDL.
+ifeq ($(OS_TARGET),macos)
+QS_MP3LIB := MP3LIB=mpg123
+else
+QS_MP3LIB :=
+endif
+
 $(QS_BIN): $(QS_STAMP)
 	@echo "==> Compilando quakespasm (motor de recursos bajos)"
-	@$(MAKE) -C $(QS_SRC) USE_SDL2=1 WITH_SYSTEM_MDL=0
+	@$(MAKE) -C $(QS_SRC) USE_SDL2=1 WITH_SYSTEM_MDL=0 $(QS_MP3LIB)
 	@mkdir -p $(BIN)
 	@cp $(QS_SRC)/quakespasm$(EXE) $@
 	@$(REPO)/scripts/copy-runtime-dlls.sh

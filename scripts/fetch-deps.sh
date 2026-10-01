@@ -101,20 +101,34 @@ fetch_engine() {
   fi
 
   # Aplicar nuestros parches encima del upstream, en orden.
+  aplicar_parches "$dir" ironwail
+  echo "$dir"
+}
+
+# Los parches van nombrados por motor, ironwail-*.patch y quakespasm-*.patch, y
+# cada arbol se aplica solo los suyos.
+#
+# Antes no se filtraba por motor y los parches se aplicaban todos al arbol de
+# Ironwail. Pasaba porque Ironwail tambien tiene un Quake/Makefile, de modo que
+# un parche pensado para Quakespasm se aplicaba ahi sin decir nada y sin
+# estropear nada, que es la peor forma de romperse.
+aplicar_parches() {
+  local dir="$1" motor="$2"
   local applied_marker="$dir/.patches-applied"
   touch "$applied_marker"
-  local p
-  for p in "$REPO_ROOT"/patches/*.patch; do
+  local p base
+  for p in "$REPO_ROOT"/patches/"$motor"-*.patch; do
+    [[ -e "$p" ]] || continue
+    base="$(basename "$p")"
     [[ -e "$p" ]] || break
-    if ! grep -qxF "$(basename "$p")" "$applied_marker" 2>/dev/null; then
-      info "aplicando parche $(basename "$p")"
+    if ! grep -qxF "$base" "$applied_marker" 2>/dev/null; then
+      info "aplicando parche $base a $motor"
       patch -d "$dir" -p1 --forward --reject-file=- <"$p" \
-        || die "fallo al aplicar $(basename "$p")"
-      grep -qxF "$(basename "$p")" "$applied_marker" 2>/dev/null || \
-        echo "$(basename "$p")" >>"$applied_marker"
+        || die "fallo al aplicar $base sobre $motor"
+      grep -qxF "$base" "$applied_marker" 2>/dev/null || \
+        echo "$base" >>"$applied_marker"
     fi
   done
-  echo "$dir"
 }
 
 # ---------------------------------------------------------------- datos
@@ -131,9 +145,16 @@ fetch_quakespasm() {
     info "extrayendo quakespasm"
     rm -rf "$dir"
     mkdir -p "$dir"
-    tar -xzf "$tarball" -C "$dir" --strip-components=1
+    # Se descartan los SDL2 prefabricados del tarball (MacOSX/, Linux/,
+    # Windows/): aqui el SDL2 es el del sistema. Y en Windows no se pueden
+    # desempaquetar, porque el framework de macOS va con enlaces simbolicos y el
+    # tar de MSYS2 no puede crearlos sin permisos de administrador. Asi que el
+    # Descargas se quedaba a medias con "Cannot create symlink".
+    tar -xzf "$tarball" -C "$dir" --strip-components=1 \
+      --exclude='*/MacOSX' --exclude='*/Linux' --exclude='*/Windows'
     touch "$dir/.direkt-stamped"
   fi
+  aplicar_parches "$dir" quakespasm
   echo "$dir"
 }
 
