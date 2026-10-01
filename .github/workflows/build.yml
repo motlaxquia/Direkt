@@ -187,7 +187,7 @@ jobs:
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-SDL2
             mingw-w64-x86_64-python
-            mingw-w64-x86_64-vorbis
+            mingw-w64-x86_64-libvorbis
             mingw-w64-x86_64-libogg
             mingw-w64-x86_64-mpg123
             mingw-w64-x86_64-mesa
