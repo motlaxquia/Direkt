@@ -96,7 +96,11 @@ jobs:
       # va versionado en el repo. Es bytecode, y el motor lo interpreta igual en
       # los tres sistemas. En Linux, donde si hay fteqcc, se recompila igual.
       - name: Dependencias
-        run: brew install make cmake pkg-config sdl2
+        run: |
+          # libvorbis, libogg y mpg123 son los decodificadores de audio de
+          # Quakespasm. patches/quakespasm-001 los encuentra con pkg-config,
+          # que es como se evita el fallo de "vorbisfile not found".
+          brew install make cmake pkg-config sdl2 libvorbis libogg mpg123
 
       - uses: actions/cache@v4
         with:
@@ -183,6 +187,9 @@ jobs:
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-SDL2
             mingw-w64-x86_64-python
+            mingw-w64-x86_64-vorbis
+            mingw-w64-x86_64-libogg
+            mingw-w64-x86_64-mpg123
             mingw-w64-x86_64-mesa
             patch
             zip

@@ -210,8 +210,15 @@ QS_BIN   := $(BIN)/quakespasm$(EXE)
 
 quakespasm: $(QS_BIN)
 
-# En macOS el MP3 se decodifica con mpg123 y no con libmad, que Homebrew ya no
-# tiene. Los codecs de onda los pone el propio SDL.
+# Solo se activan los decodificadores de audio cuyas cabeceras estan de verdad.
+#
+# Antes se activaban todos y el build reventaba entero si faltaba uno, que es lo
+# que pasaba en macOS (libvorbis) y en Windows (vorbis). Con esto, lo que no
+# esta se desactiva solo y el juego arranca igual: sin la musica, pero con el
+# resto. El paquete trae musica .ogg, asi que vorbis si importa y por eso se
+# instala en el CI; los demas son de convenience.
+QS_VORBIS := $(shell pkg-config --exists vorbisfile 2>/dev/null && echo 1 || echo 0)
+QS_MP3    := $(shell pkg-config --exists mpg123 2>/dev/null && echo 1 || echo 0)
 ifeq ($(OS_TARGET),macos)
 QS_MP3LIB := MP3LIB=mpg123
 else
@@ -220,7 +227,9 @@ endif
 
 $(QS_BIN): $(QS_STAMP)
 	@echo "==> Compilando quakespasm (motor de recursos bajos)"
-	@$(MAKE) -C $(QS_SRC) USE_SDL2=1 WITH_SYSTEM_MDL=0 $(QS_MP3LIB)
+	@echo "    audio: vorbis=$(QS_VORBIS) mp3=$(QS_MP3) (lo que no exista se desactiva)"
+	@$(MAKE) -C $(QS_SRC) USE_SDL2=1 WITH_SYSTEM_MDL=0 \
+		USE_CODEC_VORBIS=$(QS_VORBIS) USE_CODEC_MP3=$(QS_MP3) $(QS_MP3LIB)
 	@mkdir -p $(BIN)
 	@cp $(QS_SRC)/quakespasm$(EXE) $@
 	@$(REPO)/scripts/copy-runtime-dlls.sh
