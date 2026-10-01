@@ -14,10 +14,16 @@
 
 SHELL := /bin/bash
 
-# Sistema en el que se esta compilando. "uname -s" da Linux, Darwin o MINGW64_NT,
-# y lo que interesa es la familia: darwin son los Mac y lo demas es Linux o
-# Windows. Se usa para enlazar con el OpenGL que toque y para nombrar el paquete.
-OS_DETECT := $(shell uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/^darwin$$/macos/')
+# Sistema en el que se esta compilando, normalizado a uno de tres: linux, macos
+# o windows. Se usa para el OpenGL que se enlaza, para la extension de los
+# ejecutables y para nombrar el paquete.
+#
+# "uname -s" devuelve Linux, Darwin o MINGW64_NT-10.0-19045 segun el caso, y hay
+# que reducirlo a los tres que soporta el proyecto. Antes solo se mapeaba darwin,
+# con lo que en MSYS2 OS_DETECT era "mingw64_nt-..." y nunca ":= windows". Por eso
+# Makefile.w64 de Quakespasm no se elegia nunca y se compilaba su codigo de Unix.
+OS_DETECT := $(shell uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' \
+  | sed -e 's/^darwin$$/macos/' -e 's/^mingw.*/windows/' -e 's/^msys.*/windows/' -e 's/^cygwin.*/windows/')
 
 # Sistema para el que se empaqueta. Es el que dice el que manda, si lo hay
 # (DIREKT_OS=windows en Windows, porque ahi uname no vale), y si no el que
@@ -271,7 +277,7 @@ EDIT_HDR  := editor.h ed_view.h ed_gui.h edtex.h
 #   macOS    -framework OpenGL  (los frameworks del sistema no son -l)
 ifeq ($(OS_DETECT),macos)
 EDIT_GL := -framework OpenGL -framework Cocoa
-else ifneq (,$(findstring mingw,$(OS_DETECT)))
+else ifeq ($(OS_DETECT),windows)
 EDIT_GL := -lopengl32
 else
 EDIT_GL := -lGL
