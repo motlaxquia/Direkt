@@ -1,0 +1,70 @@
+--- a/Quake/Makefile	2026-10-01 23:18:16.756248618 +0000
++++ b/Quake/Makefile	2026-10-01 23:18:16.758248618 +0000
+@@ -140,9 +140,16 @@
+ endif
+ ifeq ($(USE_CODEC_VORBIS),1)
+ CFLAGS+= -DUSE_CODEC_VORBIS $(cpp_vorbisdec)
++# Homebrew deja las cabeceras de libvorbis fuera del path de inclusion por
++# defecto, porque son keg-only: estan en <prefix>/opt/libvorbis/include. Sin
++# esto el enlazado no encuentra <vorbis/vorbisfile.h> y da error, que es lo que
++# pasaba al compilar en macOS. pkg-config si que lo encuentra, y es lo que ya
++# se usa unas lineas mas abajo para opusfile.
++CFLAGS+= $(shell $(PKG_CONFIG) --cflags vorbisfile)
+ CODECLIBS+= $(lib_vorbisdec)
+ endif
+ ifeq ($(USE_CODEC_MP3),1)
++CFLAGS+= $(shell $(PKG_CONFIG) --cflags mpg123)
+ CFLAGS+= -DUSE_CODEC_MP3
+ CODECLIBS+= $(lib_mp3dec)
+ endif
+@@ -162,7 +169,16 @@
+ CFLAGS+= -DUSE_CODEC_UMX
+ endif
+ 
+-ifeq ($(HOST_OS),haiku)
++# En macOS el OpenGL no es una libreria sino un framework del sistema, y no hay
++# libGL que enlazar: el enlazado falla con "ld: library 'GL' not found". En
++# MacOSX el Makefile aparte resuelve el problema, pero el generic no lo hacia.
++ifeq ($(HOST_OS),darwin)
++# Ademas del OpenGL, la aceleracion del raton de in_sdl.c usa IOKit, y en
++# Apple Silicon eso tampoco viene enlazado solo: el enlazado falla con
++# Undefined symbols for architecture arm64: "_IOMasterPort". Mismo problema que
++# tenia Ironwail, que va resuelto en patches/ironwail-001.
++COMMON_LIBS= -framework OpenGL -framework Cocoa -framework IOKit -framework CoreFoundation -lm
++else ifeq ($(HOST_OS),haiku)
+ COMMON_LIBS= -lGL
+ else
+ COMMON_LIBS= -lGL -lm
+--- a/Quake/net_sys.h	2026-10-01 23:18:16.760248618 +0000
++++ b/Quake/net_sys.h	2026-10-01 23:18:16.762248618 +0000
+@@ -160,6 +160,12 @@
+ typedef int	socklen_t;
+ #endif	/* socklen_t type */
+ 
++/* __WSAE_StrError, que usa socketerror() mas abajo, sale de wsaerror.h, y el
++ * comentario de al lado ya avisa de que hay que incluirla. No lo hacia nadie y
++ * al compilar con MinGW salia "implicit declaration of function
++ * __WSAE_StrError". Con MSVC el orden de inclusiones de casualidad lo tapaba. */
++#include "wsaerror.h"
++
+ typedef SOCKET	sys_socket_t;
+ 
+ #define	selectsocket	select
+--- a/Quake/main_sdl.c	2026-10-01 23:18:16.764248618 +0000
++++ b/Quake/main_sdl.c	2026-10-01 23:18:16.766248618 +0000
+@@ -65,7 +65,14 @@
+ 
+ // On OS X we call SDL_main from the launcher, but SDL2 doesn't redefine main
+ // as SDL_main on OS X anymore, so we do it ourselves.
+-#if defined(USE_SDL2) && defined(__APPLE__)
++//
++// El "launcher" del que habla el comentario es el ejecutable del paquete .app,
++// que es el que define main y llama a SDL_main. Al compilar un ejecutable a
++// secas, como hace este proyecto, no hay nadie que defina main y el enlazado
++// acaba con Undefined symbols for architecture arm64: "_main". Por eso solo se
++// renombra si de verdad hay launcher, que se indica con
++// QUAKESPASM_APPLE_BUNDLE_LAUNCHER. El Makefile no lo define.
++#if defined(USE_SDL2) && defined(__APPLE__) && defined(QUAKESPASM_APPLE_BUNDLE_LAUNCHER)
+ #define main SDL_main
+ #endif
+ 
