@@ -18,12 +18,24 @@ IRONWAIL_REPO="https://github.com/andrei-drexler/ironwail"
 IRONWAIL_COMMIT="08d578136ff43d7d1ef38e636dfbfd3e844be7cd"
 IRONWAIL_TARBALL_URL="$IRONWAIL_REPO/archive/$IRONWAIL_COMMIT.tar.gz"
 
+# Quakespasm: el motor de recursos bajos.
+#
+# Ironwail pide OpenGL 4.3 porque dibuja el mundo con compute shaders, y en un
+# PC viejo o con grafica integrada eso no llega. Quakespasm es el mismo juego
+# dibujado con shaders sencillos: arranca con OpenGL 1.5. Y usa el mismo
+# progs.dat y los mismos .bsp, que es lo que hace que sirva de alternativa de
+# verdad y no otro juego.
+QUAKESPASM_REPO="https://github.com/sezero/quakespasm"
+QUAKESPASM_COMMIT="f5fe17864918239d443fe4c0d6bfb980e44d19e6"
+QUAKESPASM_TARBALL_URL="$QUAKESPASM_REPO/archive/$QUAKESPASM_COMMIT.tar.gz"
+
 LIBRQUAKE_URL="https://github.com/lavenderdotpet/LibreQuake/releases/download/v0.09-beta/full.zip"
 
 
 # Generados con 'scripts/fetch-deps.sh lock' contra las descargas de la v0.09-beta.
 IRONWAIL_SHA256="c7601696e6a135ce4aa5d98b60fd3e2b8b69572c40ceafe34a11023ecec28963"
 LIBRQUAKE_SHA256="623e463b35811216244f9ba15e0c45abc1765288650b5e3d36a899b35e4bcf3d"
+QUAKESPASM_SHA256="1ca8ad2f190f9ab0aecd06d854c92637b62a3bd3f298dd877799dee0a300abd4"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
@@ -106,6 +118,25 @@ fetch_engine() {
 }
 
 # ---------------------------------------------------------------- datos
+# Motor de recursos bajos. Se descarga pero no se compila aqui: lo compila el
+# Makefile, porque cada sistema lo compila a su manera.
+fetch_quakespasm() {
+  mkdir -p "$SRC_DIR"
+  local tarball="$CACHE_DIR/quakespasm-src.tar.gz"
+  fetch "$QUAKESPASM_TARBALL_URL" "$tarball"
+  verify_sha256 "$tarball" "$QUAKESPASM_SHA256" "quakespasm"
+
+  local dir="$SRC_DIR/quakespasm"
+  if [[ ! -d "$dir/.direkt-stamped" ]]; then
+    info "extrayendo quakespasm"
+    rm -rf "$dir"
+    mkdir -p "$dir"
+    tar -xzf "$tarball" -C "$dir" --strip-components=1
+    touch "$dir/.direkt-stamped"
+  fi
+  echo "$dir"
+}
+
 fetch_data() {
   mkdir -p "$DATA_DIR"
   local zip="$CACHE_DIR/librequake-full.zip"
@@ -134,6 +165,7 @@ cmd_lock() {
   echo "--- Genera esto y pegalo en scripts/fetch-deps.sh ---"
   echo "IRONWAIL_SHA256=\"$(sha256_de "$CACHE_DIR/ironwail-src.tar.gz")\""
   echo "LIBRQUAKE_SHA256=\"$(sha256_de "$CACHE_DIR/librequake-full.zip")\""
+  echo "QUAKESPASM_SHA256=\"$(sha256_de "$CACHE_DIR/quakespasm-src.tar.gz")\""
 }
 
 cmd_verify() {
@@ -143,8 +175,9 @@ cmd_verify() {
 }
 
 case "${1:-all}" in
-  all)      fetch_engine; fetch_data; info "Dependencias listas en build/" ;;
+  all)      fetch_engine; fetch_quakespasm >/dev/null; fetch_data; info "Dependencias listas en build/" ;;
   engine)   fetch_engine ;;
+  quakespasm) fetch_quakespasm >/dev/null ;;
   data)     fetch_data ;;
   lock)     cmd_lock ;;
   verify)   cmd_verify ;;

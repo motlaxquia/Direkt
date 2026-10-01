@@ -27,6 +27,13 @@ OS_DETECT := $(shell uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/
 # valor, y entonces el paquete sale con el nombre del sistema equivocado sin que
 # nada se queje. De ahi el "linux" de repuesto al final: siempre hay uno.
 OS_TARGET := $(or $(DIREKT_OS),$(OS_DETECT),linux)
+
+# En Windows los ejecutables llevan .exe, en los demas sistemas no.
+ifeq ($(OS_TARGET),windows)
+EXE := .exe
+else
+EXE :=
+endif
 # .SHELLFLAGS es de GNU Make 4.0. El make de serie de macOS es el 3.81 y no lo
 # tiene, asi que en macOS hay que instalar make con brew; en MSYS2, pacman.
 .SHELLFLAGS := -eu -o pipefail -c
@@ -62,7 +69,7 @@ MIN_LIT ?= 15
 SOFTGL := LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe MESA_GL_VERSION_OVERRIDE=4.5COMPAT
 
 .PHONY: help setup deps engine game game-noshowcase run run-headless shot \
-        bsp bsp-test edit editor-test test portable clean distclean engine-clean data-clean patch-refresh
+        bsp bsp-test edit editor-test quakespasm test portable clean distclean engine-clean data-clean patch-refresh
 
 help:
 	@sed -n '2,12p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \?//'
@@ -72,6 +79,7 @@ help:
 	@echo "editor:   make edit        compila el editor de niveles"
 	@echo "          make editor-test  prueba el editor y dibuja un fotograma"
 	@echo "          make run-edit     abre el editor (MAPFILE=mapa.map)"
+	@echo "ligero:   make quakespasm   motor que arranca con OpenGL 1.5, para equipos viejos"
 	@echo "paquete:  make portable     .tar.gz (o .zip en Windows) con binarios, datos y fuente"
 
 setup:
@@ -163,7 +171,7 @@ run-edit: edit
 # falta una variable para el: clean y distclean usan comodines, que asi cubren
 # los tres sistemas sin tener que enumerarlos.
 
-portable: engine game bsp edit
+portable: engine quakespasm game bsp edit
 	@echo "==> Paquete para $(OS_TARGET)"
 	@DIREKT_OS=$(OS_TARGET) $(REPO)/scripts/portable.sh
 
@@ -184,6 +192,32 @@ test: engine game game-noshowcase bsp edit
 	@$(REPO)/scripts/smoke-test.sh
 	@$(REPO)/scripts/bsp-test.sh $(BSP_TEST_ARGS)
 	@$(REPO)/scripts/editor-test.sh $(EDITOR_TEST_ARGS)
+
+# ------------------------------------------------ motor de recursos bajos
+#
+# Ironwail pide OpenGL 4.3 porque dibuja el mundo con compute shaders. En un PC
+# viejo, con grafica integrada o en una maquina virtual, eso no llega y el motor
+# se niega a arrancar. Para ahi esta Quakespasm: dibuja lo mismo con shaders
+# sencillos, arranca con OpenGL 1.5 y no necesita compute shaders.
+#
+# No es otro juego: lee el mismo progs.dat y los mismos .bsp, asi que la logica
+# y los mapas son los de este repositorio. Solo cambia el dibujado.
+QS_ROOT  := $(BUILD)/src/quakespasm
+QS_SRC   := $(QS_ROOT)/Quake
+# El sello lo pone fetch-deps.sh en la raiz de la extraccion, no dentro de Quake/
+QS_STAMP := $(QS_ROOT)/.direkt-stamped
+QS_BIN   := $(BIN)/quakespasm$(EXE)
+
+quakespasm: $(QS_BIN)
+
+$(QS_BIN): $(QS_STAMP)
+	@echo "==> Compilando quakespasm (motor de recursos bajos)"
+	@$(MAKE) -C $(QS_SRC) USE_SDL2=1 WITH_SYSTEM_MDL=0
+	@mkdir -p $(BIN)
+	@cp $(QS_SRC)/quakespasm$(EXE) $@
+	@$(REPO)/scripts/copy-runtime-dlls.sh
+	@test -x $@ || { echo "ERROR: no se produjo $(QS_BIN)" >&2; exit 1; }
+	@echo "    ok"
 
 # ------------------------------------------------- compilador de mapas (.bsp)
 # El motor no trae ninguno y LibreQuake no distribuye los .map, asi que para

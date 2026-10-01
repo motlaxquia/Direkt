@@ -85,6 +85,10 @@ mkdir -p "$STAGE/bin" "$STAGE/direkt"
 # En Windows los binarios se llaman .exe, y en los demas no. No se deja que sea
 # el shell el que resuelva el nombre: cp no siempre anade el .exe por su cuenta,
 # y un cp que falla a mitad del empaquetado se lleva por delante el stage entero.
+#
+# quakespasm va el primero y es opcional: si esta compilado se incluye, que es
+# cuando el paquete sirve para equipos sin OpenGL 4.3. Si no, el paquete sale sin
+# el y el lanzador lo dice en vez de fallar al arrancar.
 # Con "if" y no con "[ ... ] && ...": lo segundo, si la condicion es falsa,
 # devuelve error y con set -e el script se para. En Linux lo seria siempre.
 if [ "$OS" = windows ]; then
@@ -92,11 +96,19 @@ if [ "$OS" = windows ]; then
 else
 	BIN_EXT=""
 fi
-for b in ironwail direkt-bsp direkt-edit; do
+for b in quakespasm ironwail direkt-bsp direkt-edit; do
 	src="$BIN/$b$BIN_EXT"
 	[ -f "$src" ] || src="$BIN/$b"
-	[ -f "$src" ] || { echo "portable: falta $b$BIN_EXT en $BIN" >&2; exit 1; }
+	if [ ! -f "$src" ]; then
+		if [ "$b" = "quakespasm" ]; then
+			echo "    quakespasm no compilado: el paquete sale sin motor ligero"
+			continue
+		fi
+		echo "portable: falta $b$BIN_EXT en $BIN" >&2
+		exit 1
+	fi
 	cp "$src" "$STAGE/bin/$b$BIN_EXT"
+	echo "    $b$BIN_EXT"
 done
 # En Windows los .exe necesitan las DLL de MINGW64 en la misma carpeta, o no
 # arrancan. En Linux y macOS esto no hace nada.
@@ -220,8 +232,9 @@ tener instalado el rasterizador:
 
 ### Forzar uno u otro
 
-    DIREKT_SOFTWARE_GL=1 ./direkt.sh    # ir siempre por software
-    DIREKT_FORCE_GL=1 ./direkt.sh       # no tocar el GL, pase lo que pase
+    DIREKT_SOFTWARE_GL=1 ./direkt.sh         # ir siempre por software
+    DIREKT_MOTOR=ironwail ./direkt.sh        # forzar el motor principal
+    DIREKT_MOTOR=quakespasm ./direkt.sh      # forzar el motor ligero
 FIN
 	;;
 esac
@@ -281,8 +294,9 @@ export DIREKT_GAMEDIR="$AQUI/datos/id1"
 # toda la partida. Con exec, la ventana, el teclado y las senales siguen siendo
 # las del propio motor.
 #
-# DIREKT_SOFTWARE_GL=1 lo fuerza, y DIREKT_FORCE_GL=1 deja el GL del sistema
-# aunque no llegue.
+# El motor se elige solo segun lo que de verdad anuncie la maquina. Se puede
+# forzar con DIREKT_MOTOR=ironwail o DIREKT_MOTOR=quakespasm, y DIREKT_SOFTWARE_GL=1
+# fuerza el rasterizador por software de Mesa.
 
 usar_llvmpipe() {
 	export LIBGL_ALWAYS_SOFTWARE=1
@@ -323,22 +337,91 @@ gl_insuficiente() {
 }
 
 jugar() {
-	local v
-	if [ "${DIREKT_FORCE_GL:-0}" = 1 ]; then
-		:  # el usuario ha dicho que no se toque el GL
-	elif [ "${DIREKT_SOFTWARE_GL:-0}" = 1 ]; then
-		usar_llvmpipe
+	local v motor=""
+	local iron="$AQUI/bin/ironwail"; [ -x "$iron" ] || iron="$AQUI/bin/ironwail.exe"
+	local qs="$AQUI/bin/quakespasm";   [ -x "$qs" ]   || qs="$AQUI/bin/quakespasm.exe"
+	[ -x "$qs" ] || qs=""
+
+	# Que motor se usa, y por que. Hay dos motores en el paquete y la decision se
+	# toma aqui, una vez, antes de arrancar.
+	#
+	# Ironwail dibuja el mundo con compute shaders y por eso pide OpenGL 4.3. Es
+	# el mejor de los dos donde llega.
+	#
+	# Quakespasm dibuja lo mismo con shaders sencillos y arranca con OpenGL 1.5.
+	# En un PC viejo, con grafica integrada o en una maquina virtual, donde
+	# Ironwail se niega a arrancar, este si. Y va mas rapido que el otro con el
+	# rasterizador por software, porque sus shaders son mucho mas baratos.
+	#
+	# O sea: donde no llega la GPU, mejor motor por software que mejor motor
+	# por hardware.
+	if [ "${DIREKT_MOTOR:-auto}" = "ironwail" ]; then
+		motor="ironwail"
+	elif [ "${DIREKT_MOTOR:-auto}" = "quakespasm" ]; then
+		motor="quakespasm"
 	elif gl_insuficiente; then
 		v="$(version_gl)"
-		echo "  OpenGL del sistema: ${v:-desconocido}, y el motor pide 4.3."
-		echo "  Se arranca con el rasterizador por software de Mesa (llvmpipe)."
-		echo "  Va mas despacio, pero dibuja. Para no hacerlo:"
-		echo "      DIREKT_FORCE_GL=1 ./direkt.sh"
+		if [ -n "$qs" ]; then
+			motor="quakespasm"
+			echo "  OpenGL del sistema: ${v:-desconocido}. El motor principal pide 4.3, y"
+			echo "  aqui no llega, asi que se usa el motor ligero, que dibuja lo mismo"
+			echo "  con OpenGL 1.5. Para forzar el otro:"
+			echo "      DIREKT_MOTOR=ironwail ./direkt.sh"
+		else
+			motor="ironwail"
+			echo "  OpenGL del sistema: ${v:-desconocido}, y el motor pide 4.3."
+			echo "  Este paquete no trae el motor ligero, asi que se cae al"
+			echo "  rasterizador por software de Mesa, que va mas despacio."
+			usar_llvmpipe
+		fi
 		echo
+	elif [ -n "$iron" ]; then
+		motor="ironwail"
+	else
+		motor="quakespasm"
+	fi
+
+	if [ "${DIREKT_SOFTWARE_GL:-0}" = 1 ]; then
 		usar_llvmpipe
 	fi
+
+	if [ "$motor" = "quakespasm" ]; then
+		[ -n "$qs" ] || { echo "este paquete no trae el motor ligero" >&2; exit 1; }
+		echo "  Motor: Quakespasm (ligero)"
+		exec "$qs" -basedir "$AQUI/datos" -basedir "$AQUI" -game direkt "$@"
+	fi
+
+	echo "  Motor: Ironwail (OpenGL 4.3)"
 	exec "$IRONWAIL" -basedir "$AQUI/datos" -basedir "$AQUI" -game direkt "$@"
 }
+
+# Dice si el mundo ya esta listo en un log, sea cual sea el motor.
+#
+# La senal de referencia es "entered the game", que es la linea de protocolo de
+# Quake y la imprimen LOS DOS motores: "LQ Player entered the game". Antes se
+# miraba solo "punto de aparicion", que es un mensaje de nuestro codigo y llega
+# por localcmd; con el motor ligero ese mensaje no llegaba a tiempo y el test
+# se comia 180 s de espera para fallar. Un motor nuevo, o el mismo con otro
+# tiempo de arranque, no tendria por que tirar el banco.
+mundo_listo() {
+	grep -qE "entered the game|punto de aparicion" "$1"
+}
+
+# stdbuf saca la salida linea a linea.
+#
+# No es cosmetico: Quakespasm guarda la consola en un bufer y lo vacia al salir,
+# asi que mientras corre el log se queda en las dos o tres primeras lineas. Ir a
+# mirar ahi si el mundo esta cargado no funciona: se espera 180 s a que algo que
+# ya habia pasado pero que no se lee hasta el kill. Con stdbuf aparece en
+# seguida. Ironwail escribe directamente y no lo necesita, pero no hace daño.
+#
+# Se declara con array y no con "[ ... ] && ..." porque con set -e, si la
+# condicion es falsa, el script se para. Y se invoca con ${arr[@]+...} porque el
+# bash 3.2 de macOS peta con "${arr[@]}" si el array esta vacio y hay set -u.
+STDBUF=()
+if command -v stdbuf >/dev/null 2>&1; then
+	STDBUF=(stdbuf -oL -eL)
+fi
 
 # Comprobacion autonoma: no necesita el arbol de desarrollo ni fteqcc, solo lo
 # que va en el paquete.
@@ -361,26 +444,32 @@ comprobar() {
 		lanzo=("$IRONWAIL")
 	fi
 
-	if [ "${DIREKT_FORCE_GL:-0}" != 1 ] && { [ "${DIREKT_SOFTWARE_GL:-0}" = 1 ] || gl_insuficiente; }; then
+	# Que motor se prueba es la misma decision que en jugar(): si el OpenGL no
+	# llega a 4.3 y hay motor ligero, se prueba con el ligero. Si no hay motor
+	# ligero, se cae al rasterizador por software.
+	local qs="$AQUI/bin/quakespasm"
+	[ -x "$qs" ] || qs="$AQUI/bin/quakespasm.exe"
+	if [ "${DIREKT_MOTOR:-auto}" != "ironwail" ] && gl_insuficiente && [ -x "$qs" ]; then
+		lanzo=("$qs")
+		echo "  OpenGL insuficiente: se prueba con el motor ligero"
+	elif [ "${DIREKT_SOFTWARE_GL:-0}" = 1 ] || gl_insuficiente; then
 		usar_llvmpipe
 	fi
 
-	"${lanzo[@]}" -basedir "$AQUI/datos" -basedir "$AQUI" -game direkt \
+	${STDBUF[@]+"${STDBUF[@]}"} "${lanzo[@]}" -basedir "$AQUI/datos" -basedir "$AQUI" -game direkt \
 		-nosound -window -width 640 -height 480 +map lqdm1 >"$log" 2>&1 &
 	pid=$!
 
-	# La senal de que el mundo esta listo la da la propia logica de juego: si
-	# encuentra el punto de aparicion, el mapa esta cargado y el jugador existe.
 	for ((i = 0; i < espera; i++)); do
-		grep -q "punto de aparicion" "$log" && break
+		mundo_listo "$log" && break
 		kill -0 "$pid" 2>/dev/null || break
 		sleep 1
 	done
 
-	if grep -q "punto de aparicion" "$log"; then
+	if mundo_listo "$log"; then
 		rc=0
 	else
-		echo "  FALLA: el mundo no llego a estar listo en ${espera}s"
+		echo "  FALLA: el mundo no llego a estar listo en ${espera}s (con $(basename "${lanzo[${#lanzo[@]}-1]}"))"
 		grep -iE "OpenGL [0-9.]+ required" "$log" | head -2
 		tail -20 "$log"
 		rc=1

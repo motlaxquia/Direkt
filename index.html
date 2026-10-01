@@ -482,16 +482,15 @@ cd direkt-portable-linux</pre>
     <h2 id="t-req">Lo que hace falta en tu equipo</h2>
     <p>Nada que compilar. Solo esto:</p>
     <ul class="lista">
-      <li><b>OpenGL 4.3</b>. El motor usa <i>compute shaders</i> para dibujar el mundo, y por eso pide esa version y no una anterior. Con una tarjeta grafica de los ultimos diez años esto se cumple solo.</li>
+      <li><b>OpenGL 4.3</b>, o <b>1.5</b> si tu equipo no llega. El paquete trae <b>dos motores</b> con el mismo juego, los mismos mapas y el mismo <code>progs.dat</code>; solo cambia el dibujado. El lanzador mira lo que anuncia tu tarjeta y elige solo, sin preguntar.</li>
       <li><b>SDL2</b> (<code>libsdl2-2.0-0</code>, <code>libgl1</code>)</li>
-      <li>Para jugar sin tarjeta grafica: <b>Mesa</b> (<code>libgl1-mesa-dri</code>), que dibuja por software. El lanzador cae ahi solo cuando detecta que el OpenGL de la maquina no llega.</li>
+      <li>Si no hay tarjeta grafica: <b>Mesa</b> (<code>libgl1-mesa-dri</code>), que dibuja por software. El lanzador recurre ahi solo cuando detecta que el OpenGL de la maquina no llega, y entonces usa ademas el motor ligero, que es mas rapido por software que el otro.</li>
       <li>Opcional: <code>xvfb</code> para la comprobacion automatica, <code>imagemagick</code> para las capturas</li>
     </ul>
     <p class="aviso">
-      En <b>macOS</b> esto no se cumple: el OpenGL del sistema llega como mucho
-      a 4.1 y no hay forma de subirlo. El paquete se publica para probarlo, pero
-      en un Mac con GPU de Apple el motor probablemente no arrancara. El
-      generador de mapas y el editor si que funcionan.
+      En <b>macOS</b> el motor principal no llega: el OpenGL del sistema se queda
+      en 4.1 y no hay forma de subirlo. Ahi el lanzador usa el motor ligero, que
+      con 4.1 si funciona, ademas del generador de mapas y el editor.
     </p>
     <p class="aviso">
       En Debian y Ubuntu:
@@ -506,7 +505,7 @@ cd direkt-portable-linux</pre>
       Un fichero de 127 MB se puede cortar por el camino. El hash SHA-256
       sale impreso en cuanto se acaba de bajar:
     </p>
-    <pre class="hash" id="hash">58e55f9ed2fcf7940937b68349c057e2e5516e9db4ddf30fdcddd9b2105dbe95  direkt-portable-linux.tar.gz
+    <pre class="hash" id="hash">4b635eb795dc3625112fa701ed4e7caa4ec88bf5a90709855cf06eeeea46d6e4  direkt-portable-linux.tar.gz
 9726976128d0796635126a84323bd154df092a93d34546c8a94e6c636bad630a  direkt-portable-macos.tar.gz
 df527f087b6a7e523cf47cd6465ed675350279dda87b055d0828b503a4fd7cb2  direkt-portable-windows.zip</pre>
     <p style="margin-top:1.1rem">
@@ -603,15 +602,15 @@ df527f087b6a7e523cf47cd6465ed675350279dda87b055d0828b503a4fd7cb2  direkt-portabl
     fichero.textContent = Nombres[SO] + ' \u00b7 127 MB';
   }
 
-  // En macOS hay que avisar, porque el paquete puede que no arranque: el motor
-  // pide OpenGL 4.3 y el OpenGL de macOS no pasa de 4.1. Es mejor decirlo
-  // aqui que dejar que el usuario se encuentre con un error de OpenGL.
+  // El motor principal pide OpenGL 4.3 y macOS no pasa de 4.1. No hace falta
+  // avisar de que no va a funcionar, porque el paquete trae un segundo motor que
+  // si entra ahi, y el lanzador lo elige solo. Solo se explica, que si no el
+  // boton grande pone un fichero que parece que no va a funcionar.
   if (SO === 'macos' && nota) {
     nota.innerHTML =
-      'Antes de nada: el motor pide <b>OpenGL 4.3</b> y el OpenGL de macOS ' +
-      'llega como mucho a 4.1, asi que en muchos Mac este paquete no llegara ' +
-      'a arrancar. El generador de mapas y el editor si que funcionan. Al ' +
-      'descomprimirlo, el fichero <b>LEE-ME-ENTORNO.md</b> lo explica.';
+      'En macOS el motor principal no llega, porque el OpenGL del sistema se ' +
+      'queda en 4.1. El paquete trae un segundo motor que si funciona ahi, y el ' +
+      'lanzador lo elige solo. El generador de mapas y el editor tambien.';
   }
 })();
 </script>

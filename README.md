@@ -33,7 +33,7 @@ cd direkt-portable-linux
 SHA-256 del paquete:
 
 ```
-58e55f9ed2fcf7940937b68349c057e2e5516e9db4ddf30fdcddd9b2105dbe95  direkt-portable-linux.tar.gz
+4b635eb795dc3625112fa701ed4e7caa4ec88bf5a90709855cf06eeeea46d6e4  direkt-portable-linux.tar.gz
 9726976128d0796635126a84323bd154df092a93d34546c8a94e6c636bad630a  direkt-portable-macos.tar.gz
 df527f087b6a7e523cf47cd6465ed675350279dda87b055d0828b503a4fd7cb2  direkt-portable-windows.zip
 ```
@@ -43,10 +43,27 @@ Linux el lanzador lo comprueba antes de arrancar y, si el OpenGL de la máquina
 no llega, cae solo al rasterizador por software de Mesa (`llvmpipe`). Se puede
 forzar en los dos sentidos:
 
+El motor se elige solo según lo que anuncie la máquina, y se puede forzar:
+
 ```sh
-DIREKT_SOFTWARE_GL=1 ./direkt.sh    # ir siempre por software
-DIREKT_FORCE_GL=1 ./direkt.sh       # no tocar el GL, pase lo que pase
+DIREKT_SOFTWARE_GL=1 ./direkt.sh      # ir siempre por software
+DIREKT_MOTOR=ironwail ./direkt.sh     # forzar el motor principal (OpenGL 4.3)
+DIREKT_MOTOR=quakespasm ./direkt.sh   # forzar el motor ligero (OpenGL 1.5)
 ```
+
+### Equipos sin OpenGL 4.3
+
+El paquete trae **dos motores** con el mismo juego, los mismos `.bsp` y el mismo
+`progs.dat`. Solo cambia el dibujado:
+
+| Motor | Pide | Para qué |
+|---|---|---|
+| **Ironwail** | OpenGL 4.3 | El mejor dibujado, con *compute shaders*. |
+| **Quakespasm** | OpenGL 1.5 | Equipos viejos, gráficos integrados, máquinas virtuales. |
+
+Donde el OpenGL no llega a 4.3, el lanzador arranca con Quakespasm sin preguntar.
+Y va más rápido que el otro con el rasterizador por software, porque sus shaders
+son mucho más baratos.
 
 En una máquina sin tarjeta gráfica hace falta Mesa, que va por software:
 

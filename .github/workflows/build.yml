@@ -40,8 +40,8 @@ jobs:
       - name: Descargas
         run: make deps
 
-      - name: Motor
-        run: make engine
+      - name: Motores
+        run: make engine quakespasm
 
       - name: Generador, editor y datos
         run: make bsp edit
@@ -108,8 +108,8 @@ jobs:
       - name: Descargas
         run: make deps
 
-      - name: Motor
-        run: make engine
+      - name: Motores
+        run: make engine quakespasm
 
       - name: Generador, editor y datos
         run: make bsp edit
@@ -198,9 +198,9 @@ jobs:
         shell: msys2 {0}
         run: make deps
 
-      - name: Motor
+      - name: Motores
         shell: msys2 {0}
-        run: make engine
+        run: make engine quakespasm
 
       - name: Generador, editor y datos
         shell: msys2 {0}

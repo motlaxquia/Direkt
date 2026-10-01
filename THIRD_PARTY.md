@@ -7,7 +7,8 @@ por componente, el origen y la licencia de todo lo que se distribuye con el proy
 
 | Componente | Uso | Licencia | Dónde se obtiene |
 |---|---|---|---|
-| Ironwail (y su ancestro QuakeSpasm/GLQuake) | Motor del juego | GPL-2.0 | `scripts/fetch-deps.sh` |
+| Ironwail (y su ancestro QuakeSpasm/GLQuake) | Motor del juego, el que pide OpenGL 4.3 | GPL-2.0 | `scripts/fetch-deps.sh` |
+| Quakespasm | Segundo motor, el ligero: arranca con OpenGL 1.5 | GPL-2.0 | `scripts/fetch-deps.sh` |
 | Quake engine, original de id Software | Base histórica del motor | GPL-2.0 | `id-Software/Quake` |
 | LibreQuake | Modelos, texturas, sonidos, música, niveles | BSD-3-Clause **y** GPL-2.0 | `scripts/fetch-deps.sh` |
 | `gfx/pop.lmp` (dentro de LibreQuake) | Desbloquea el modo registrado en Ironwail | GPL-2.0 | dentro de `pak1.pak` de LibreQuake |
@@ -59,6 +60,9 @@ Nota sobre sprites: LibreQuake sustituyó casi todos los sprites de Quake por **
 - Quake es © id Software. La publicación del código fuente fue un acto deliberado de
   id Software bajo GPL-2.0; ver `readme.txt` del release original.
 - Ironwail es © los autores de QuakeSpasm / Ironwail, GPL-2.0.
+- Quakespasm es © los autores de Quakespasm (sezero y colaboradores), GPL-2.0. Va
+  incluido como binario aparte, no integrado en Ironwail, y ambos leen el mismo
+  `progs.dat` y los mismos `.bsp`.
 - LibreQuake es © 2019-2023 los colaboradores del proyecto LibreQuake, BSD-3-Clause.
   Créditos completos en el archivo `CREDITS` que acompaña a sus datos.
 
