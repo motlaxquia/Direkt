@@ -225,10 +225,19 @@ else
 QS_MP3LIB :=
 endif
 
+# En Windows se usa su propio Makefile, Makefile.w64. Con el generico se compila
+# el codigo de red de Windows nativo, que espera cabeceras de Winsock que GCC no
+# trae puestas, y salen errores de "implicit declaration of __WSAE_StrError".
+ifeq ($(OS_TARGET),windows)
+QS_MAKEFILE := Makefile.w64
+else
+QS_MAKEFILE := Makefile
+endif
+
 $(QS_BIN): $(QS_STAMP)
 	@echo "==> Compilando quakespasm (motor de recursos bajos)"
 	@echo "    audio: vorbis=$(QS_VORBIS) mp3=$(QS_MP3) (lo que no exista se desactiva)"
-	@$(MAKE) -C $(QS_SRC) USE_SDL2=1 WITH_SYSTEM_MDL=0 \
+	@$(MAKE) -C $(QS_SRC) -f $(QS_MAKEFILE) USE_SDL2=1 WITH_SYSTEM_MDL=0 \
 		USE_CODEC_VORBIS=$(QS_VORBIS) USE_CODEC_MP3=$(QS_MP3) $(QS_MP3LIB)
 	@mkdir -p $(BIN)
 	@cp $(QS_SRC)/quakespasm$(EXE) $@

@@ -1,5 +1,5 @@
---- a/Quake/Makefile	2026-10-01 23:04:01.143257467 +0000
-+++ b/Quake/Makefile	2026-10-01 23:04:01.146257467 +0000
+--- a/Quake/Makefile	2026-10-01 23:09:59.275253763 +0000
++++ b/Quake/Makefile	2026-10-01 23:09:59.277253763 +0000
 @@ -140,9 +140,16 @@
  endif
  ifeq ($(USE_CODEC_VORBIS),1)
@@ -17,7 +17,7 @@
  CFLAGS+= -DUSE_CODEC_MP3
  CODECLIBS+= $(lib_mp3dec)
  endif
-@@ -162,7 +169,12 @@
+@@ -162,7 +169,16 @@
  CFLAGS+= -DUSE_CODEC_UMX
  endif
  
@@ -26,7 +26,11 @@
 +# libGL que enlazar: el enlazado falla con "ld: library 'GL' not found". En
 +# MacOSX el Makefile aparte resuelve el problema, pero el generic no lo hacia.
 +ifeq ($(HOST_OS),darwin)
-+COMMON_LIBS= -framework OpenGL -framework Cocoa -lm
++# Ademas del OpenGL, la aceleracion del raton de in_sdl.c usa IOKit, y en
++# Apple Silicon eso tampoco viene enlazado solo: el enlazado falla con
++# Undefined symbols for architecture arm64: "_IOMasterPort". Mismo problema que
++# tenia Ironwail, que va resuelto en patches/ironwail-001.
++COMMON_LIBS= -framework OpenGL -framework Cocoa -framework IOKit -framework CoreFoundation -lm
 +else ifeq ($(HOST_OS),haiku)
  COMMON_LIBS= -lGL
  else
