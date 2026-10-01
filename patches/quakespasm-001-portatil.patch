@@ -1,5 +1,5 @@
---- a/Quake/Makefile	2026-10-01 23:18:16.756248618 +0000
-+++ b/Quake/Makefile	2026-10-01 23:18:16.758248618 +0000
+--- a/Quake/Makefile	2026-10-01 23:28:03.276242552 +0000
++++ b/Quake/Makefile	2026-10-01 23:28:03.284242552 +0000
 @@ -140,9 +140,16 @@
  endif
  ifeq ($(USE_CODEC_VORBIS),1)
@@ -35,8 +35,8 @@
  COMMON_LIBS= -lGL
  else
  COMMON_LIBS= -lGL -lm
---- a/Quake/net_sys.h	2026-10-01 23:18:16.760248618 +0000
-+++ b/Quake/net_sys.h	2026-10-01 23:18:16.762248618 +0000
+--- a/Quake/net_sys.h	2026-10-01 23:28:03.278242552 +0000
++++ b/Quake/net_sys.h	2026-10-01 23:28:03.286242552 +0000
 @@ -160,6 +160,12 @@
  typedef int	socklen_t;
  #endif	/* socklen_t type */
@@ -50,8 +50,8 @@
  typedef SOCKET	sys_socket_t;
  
  #define	selectsocket	select
---- a/Quake/main_sdl.c	2026-10-01 23:18:16.764248618 +0000
-+++ b/Quake/main_sdl.c	2026-10-01 23:18:16.766248618 +0000
+--- a/Quake/main_sdl.c	2026-10-01 23:28:03.280242552 +0000
++++ b/Quake/main_sdl.c	2026-10-01 23:28:03.288242552 +0000
 @@ -65,7 +65,14 @@
  
  // On OS X we call SDL_main from the launcher, but SDL2 doesn't redefine main
@@ -68,3 +68,31 @@
  #define main SDL_main
  #endif
  
+--- a/Quake/net_udp.c	2026-10-01 23:28:03.282242552 +0000
++++ b/Quake/net_udp.c	2026-10-01 23:28:12.452242457 +0000
+@@ -72,8 +72,12 @@
+ #endif
+ 		if (!(local = gethostbyname(buff)))
+ 		{
++			// h_errno y hstrerror son de Haiku y de Unix, y en Windows no
++			// existen: SOCKETERRNO y socketerror() los define net_sys.h por
++			// plataforma. Con hstrerror, al compilar con MinGW, salia
++			// implicit declaration of function hstrerror.
+ 			Con_SafePrintf("UDP_Init: WARNING: gethostbyname failed (%s)\n",
+-						hstrerror(h_errno));
++						socketerror(SOCKETERRNO));
+ 		}
+ 		else if (local->h_addrtype != AF_INET)
+ 		{
+@@ -270,7 +274,10 @@
+ 	if (net_acceptsocket == INVALID_SOCKET)
+ 		return INVALID_SOCKET;
+ 
+-	if (ioctl (net_acceptsocket, FIONREAD, &available) == -1)
++	// ioctlsocket y no ioctl: en Windows la llamada se llama asi, y el mensaje de
++	// error de mas abajo ya lo decia. net_sys.h define ioctlsocket como ioctl en
++	// Unix, de modo que el nombre vale para los dos.
++	if (ioctlsocket (net_acceptsocket, FIONREAD, &available) == -1)
+ 	{
+ 		int err = SOCKETERRNO;
+ 		Sys_Error ("UDP: ioctlsocket (FIONREAD) failed (%s)", socketerror(err));
