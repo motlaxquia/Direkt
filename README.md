@@ -102,6 +102,20 @@ sudo apt install libsdl2-2.0-0 libgl1 libgl1-mesa-dri xvfb
 como mucho a 4.1 y no hay forma de subirlo. El generador de mapas y el editor sí
 que funcionan. Cada paquete lleva un `LEE-ME-ENTORNO.md` con los detalles.
 
+## Reglas del jugador
+
+- **Una vida.** Un toque y se muere. La constante `DIREKT_MAX_HEALTH` está al
+  principio de `game/qc/defs.qc`, como `#define` y no como variable global: es lo
+  primero que se incluye, así que la ven `client.qc` y `player.qc`, y al no
+  ocupar sitio en la tabla de globales no desplaza los del sistema, que es lo
+  que hace que el motor abortaría al cargar el `progs.dat`.
+- **Sin armadura.** Con armadura, el primer toque se lo comería la armadura antes
+  de hacer daño, y "un toque y muere" dejaría de ser cierto.
+- **La barra de estado no se dibuja.** `scr_drawsb` vale 0 por defecto en los
+  dos motores, y con una sola vida el HUD solo ocuparía sitio. Se puede volver a
+  encender con `+set scr_drawsb 1`. El inventario no aparece por la misma razón:
+  solo se ve el arma.
+
 ## Qué hay aquí
 
 | Ruta | Qué es |
@@ -156,6 +170,10 @@ source scripts/xvfb-env.sh
 make run-headless              # arranca, captura y se apaga
 make shot MAP=lq_e1m1          # captura de otro mapa
 ```
+
+Los dos motores llevan el mismo `progs.dat` y los mismos mapas, así que las
+pruebas tienen que dar lo mismo en los dos. `scripts/run-headless.sh` acepta
+`DIREKT_TEST_ENGINE=quakespasm` para probar el ligero.
 
 ## Mapas propios: `direkt-bsp`
 
