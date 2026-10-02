@@ -218,13 +218,25 @@ quakespasm: $(QS_BIN)
 
 # Solo se activan los decodificadores de audio cuyas cabeceras estan de verdad.
 #
-# Antes se activaban todos y el build reventaba entero si faltaba uno, que es lo
-# que pasaba en macOS (libvorbis) y en Windows (vorbis). Con esto, lo que no
-# esta se desactiva solo y el juego arranca igual: sin la musica, pero con el
-# resto. El paquete trae musica .ogg, asi que vorbis si importa y por eso se
-# instala en el CI; los demas son de convenience.
-QS_VORBIS := $(shell pkg-config --exists vorbisfile 2>/dev/null && echo 1 || echo 0)
-QS_MP3    := $(shell pkg-config --exists mpg123 2>/dev/null && echo 1 || echo 0)
+# Antes se activaban todos y el build reventaba entero si faltaba uno. Pasa en
+# macOS con libvorbis y en Windows con casi todos, porque Makefile.w64 enciende
+# mas codecs que el generico: FLAC, opus, xmp y umx. Con esto, lo que no esta se
+# desactiva solo y el juego arranca igual: sin esa pista, pero con el resto. El
+# paquete trae musica .ogg, asi que vorbis si importa y por eso se instala en el
+# CI; los demas son de convenience.
+#
+# Se sondea con pkg-config porque es el metodo que ya usa el propio Makefile de
+# Quakespasm para opusfile.
+# Recursiva y no simple a proposito: en una ":=" el $(shell) se expande al
+# DEFINIR la variable, cuando $(1) todavia no vale nada, y el sondeo daria
+# siempre 0. Con "=" se expande al usarla, que es cuando $(call) ya ha
+# sustituido el argumento.
+QS_TST = $(shell pkg-config --exists $(1) 2>/dev/null && echo 1 || echo 0)
+QS_VORBIS := $(call QS_TST,vorbisfile)
+QS_MP3    := $(call QS_TST,mpg123)
+QS_FLAC   := $(call QS_TST,FLAC)
+QS_OPUS   := $(call QS_TST,opusfile)
+QS_XMP    := $(call QS_TST,xmp)
 ifeq ($(OS_TARGET),macos)
 QS_MP3LIB := MP3LIB=mpg123
 else
@@ -247,9 +259,12 @@ endif
 
 $(QS_BIN): $(QS_STAMP)
 	@echo "==> Compilando quakespasm (motor de recursos bajos)"
-	@echo "    audio: vorbis=$(QS_VORBIS) mp3=$(QS_MP3) (lo que no exista se desactiva)"
+	@echo "    audio: vorbis=$(QS_VORBIS) mp3=$(QS_MP3) flac=$(QS_FLAC) opus=$(QS_OPUS) xmp=$(QS_XMP)"
+	@echo "    (lo que no exista se desactiva; el juego arranca igual sin esa pista)"
 	@$(MAKE) -C $(QS_SRC) -f $(QS_MAKEFILE) USE_SDL2=1 WITH_SYSTEM_MDL=0 $(QS_SDL) \
-		USE_CODEC_VORBIS=$(QS_VORBIS) USE_CODEC_MP3=$(QS_MP3) $(QS_MP3LIB)
+		USE_CODEC_VORBIS=$(QS_VORBIS) USE_CODEC_MP3=$(QS_MP3) \
+		USE_CODEC_FLAC=$(QS_FLAC) USE_CODEC_OPUS=$(QS_OPUS) USE_CODEC_XMP=$(QS_XMP) \
+		USE_CODEC_UMX=0 $(QS_MP3LIB)
 	@mkdir -p $(BIN)
 	@cp $(QS_SRC)/quakespasm$(EXE) $@
 	@$(REPO)/scripts/copy-runtime-dlls.sh
