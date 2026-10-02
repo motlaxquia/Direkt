@@ -160,34 +160,71 @@ a:hover{text-decoration-thickness:2px}
   color:var(--gris-2);
   margin:0 0 .8rem;
 }
+/* Los botones de sistema usan la MISMA dentadura que el boton grande, pero en
+   version fina. Antes eran rectangulos con un borde de un pixel y eso hacia que
+   no parecieran de la misma familia que el grande, que es el que la gente pulsa.
+   Ahora los tres son el mismo elemento a distinto tamano. */
 .plataformas-lista{
   list-style:none;
   margin:0;
   padding:0;
   display:flex;
   flex-wrap:wrap;
-  gap:.6rem;
+  gap:.75rem;
   justify-content:center;
 }
+.plataformas-lista li{display:flex}
 .plataformas-lista a{
-  display:block;
-  padding:.55rem 1.1rem;
-  border:1px solid var(--linea);
-  background:var(--papel-2);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:.15rem;
+  padding:.7rem 1.15rem;
   text-decoration:none;
   color:var(--tinta);
-  transition:background .15s, border-color .15s;
+  text-align:center;
 }
-.plataformas-lista a:hover,
-.plataformas-lista a:focus-visible{
+.plataformas-lista a > .dentro{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:.15rem;
+  background:var(--papel);
+  height:auto;
+  transition:background .15s, color .15s;
+}
+.plataformas-lista a:hover > .dentro,
+.plataformas-lista a:focus-visible > .dentro{
   background:var(--tinta);
   color:var(--papel);
-  border-color:var(--tinta);
 }
-.plataformas-lista b{font-weight:normal; letter-spacing:.12em; text-transform:uppercase}
-.plataformas-lista span{color:var(--gris); font-size:.8rem; margin-left:.5em}
-.plataformas-lista a:hover span,
-.plataformas-lista a:focus-visible span{color:rgba(255,255,255,.7)}
+.plataformas-lista a:hover,
+.plataformas-lista a:focus-visible{outline:none}
+
+/* El del sistema que ha detectado el script. No se oculta el resto: estan
+   todos, porque hay gente que descarga para otra maquina. Lo que se hace es
+   marcarlo con una etiqueta y con mas contraste, para que se vea de un vistazo
+   cual va a bajarse con solo pulsar el boton grande. */
+.plataformas-lista a[data-actual] .marca{visibility:visible}
+.plataformas-lista a[data-actual] > .dentro{background:var(--tinta); color:var(--papel)}
+.plataformas-lista a[data-actual]:hover > .dentro{
+  background:var(--tinta); color:var(--papel);
+}
+
+.marca{
+  visibility:hidden;
+  font-size:.62rem;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--gris-2);
+  line-height:1;
+}
+.plataformas-lista a[data-actual] .marca{color:rgba(255,255,255,.75)}
+.plataformas-lista b{font-weight:400; letter-spacing:.14em; text-transform:uppercase}
+.plataformas-lista .tam{color:var(--gris); font-size:.78rem; line-height:1.2}
+.plataformas-lista a:hover .tam,
+.plataformas-lista a:focus-visible .tam{color:rgba(255,255,255,.72)}
+.plataformas-lista a[data-actual] .tam{color:rgba(255,255,255,.72)}
 
 /* El del sistema que ha detectado el script. No se oculta el resto: estan
    todos, porque hay gente que descarga para otra maquina. */
@@ -372,7 +409,7 @@ ul.lista li::before{
          download>
         <span class="dentro">
           <span class="boton">
-            <span class="grito">Bajar</span>
+            <span class="grito" id="grito-descarga">Bajar para Linux</span>
             <span class="fichero" id="fichero-descarga">direkt-portable-linux.tar.gz &middot; 127 MB</span>
           </span>
         </span>
@@ -381,12 +418,30 @@ ul.lista li::before{
       <nav class="plataformas" aria-label="Elegir sistema">
         <p class="plataformas-titulo" id="t-plataformas">Paquete para tu sistema</p>
         <ul class="plataformas-lista">
-          <li><a href="https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-linux.tar.gz"
-                 data-so="linux"><b>Linux</b> <span>tar.gz &middot; 127 MB</span></a></li>
-          <li><a href="https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-macos.tar.gz"
-                 data-so="macos"><b>macOS</b> <span>tar.gz &middot; 127 MB</span></a></li>
-          <li><a href="https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-windows.zip"
-                 data-so="windows"><b>Windows</b> <span>zip &middot; 127 MB</span></a></li>
+          <li><a class="dientes dientes--fino" data-so="linux"
+                 href="https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-linux.tar.gz">
+            <span class="dentro">
+              <span class="marca">tu sistema</span>
+              <b>Linux</b>
+              <span class="tam">tar.gz &middot; 127 MB</span>
+            </span>
+          </a></li>
+          <li><a class="dientes dientes--fino" data-so="macos"
+                 href="https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-macos.tar.gz">
+            <span class="dentro">
+              <span class="marca">tu sistema</span>
+              <b>macOS</b>
+              <span class="tam">tar.gz &middot; 127 MB</span>
+            </span>
+          </a></li>
+          <li><a class="dientes dientes--fino" data-so="windows"
+                 href="https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-windows.zip">
+            <span class="dentro">
+              <span class="marca">tu sistema</span>
+              <b>Windows</b>
+              <span class="tam">zip &middot; 127 MB</span>
+            </span>
+          </a></li>
         </ul>
         <p class="plataformas-nota" id="nota-plataformas">
           Todos los paquetes llevan los binarios, los datos del juego y el
@@ -573,6 +628,15 @@ d97edf33f58b72625e3bc16568b8d380753cf3c86864eaef119b64f136a75dc7  direkt-portabl
     windows: 'direkt-portable-windows.zip'
   };
 
+  // El boton grande dice para que sistema baja. Antes decia solo "Bajar", que
+  // hacia que no se supiera cual de los tres paquetes se va a recibir hasta
+  //despues de pulsar.
+  var Sistemas = {
+    linux: 'Linux',
+    macos: 'macOS',
+    windows: 'Windows'
+  };
+
   var enlace = document.getElementById('descarga');
   var fichero = document.getElementById('fichero-descarga');
   var nota = document.getElementById('nota-plataformas');
@@ -593,6 +657,11 @@ d97edf33f58b72625e3bc16568b8d380753cf3c86864eaef119b64f136a75dc7  direkt-portabl
 
   if (fichero) {
     fichero.textContent = Nombres[SO] + ' \u00b7 127 MB';
+  }
+
+  var grito = document.getElementById('grito-descarga');
+  if (grito) {
+    grito.textContent = 'Bajar para ' + Sistemas[SO];
   }
 
   // El motor principal pide OpenGL 4.3 y macOS no pasa de 4.1. No hace falta

@@ -354,6 +354,22 @@ gl_insuficiente() {
 	return 1
 }
 
+# stdbuf saca la salida linea a linea.
+#
+# No es cosmetico: Quakespasm guarda la consola en un bufer y lo vacia al salir,
+# asi que mientras corre el log se queda en las dos o tres primeras lineas. Ir a
+# mirar ahi si el mundo esta cargado no funciona: se espera 180 s a que algo que
+# ya habia pasado pero que no se lee hasta el kill. Con stdbuf aparece en
+# seguida. Ironwail escribe directamente y no lo necesita, pero no hace daño.
+#
+# Se declara con array y no con "[ ... ] && ..." porque con set -e, si la
+# condicion es falsa, el script se para. Y se invoca con ${arr[@]+...} porque el
+# bash 3.2 de macOS peta con "${arr[@]}" si el array esta vacio y hay set -u.
+STDBUF=()
+if command -v stdbuf >/dev/null 2>&1; then
+	STDBUF=(stdbuf -oL -eL)
+fi
+
 # Que motor hay elegido.
 #
 # El orden es: la variable de entorno manda sobre todo, luego el fichero de
@@ -400,9 +416,12 @@ motor_poner() {
 
 jugar() {
 	local v motor=""
-	local iron="$AQUI/bin/ironwail"; [ -x "$iron" ] || iron="$AQUI/bin/ironwail.exe"
-	local qs="$AQUI/bin/quakespasm";   [ -x "$qs" ]   || qs="$AQUI/bin/quakespasm.exe"
+	local iron qs
+	IRONWAIL="$AQUI/bin/ironwail";    [ -x "$IRONWAIL" ] || IRONWAIL="$AQUI/bin/ironwail.exe"
+	QUAKESPASM="$AQUI/bin/quakespasm"; [ -x "$QUAKESPASM" ] || QUAKESPASM="$AQUI/bin/quakespasm.exe"
+	iron="$IRONWAIL"; qs="$QUAKESPASM"
 	[ -x "$qs" ] || qs=""
+	[ -x "$iron" ] || iron=""
 
 	# Que motor se usa, y por que. Hay dos motores en el paquete y la decision se
 	# toma aqui, una vez, antes de arrancar.
@@ -444,18 +463,99 @@ jugar() {
 		motor="quakespasm"
 	fi
 
+	if [ "$motor" = "ironwail" ] && [ -z "$iron" ]; then
+		echo "este paquete no trae el motor principal" >&2
+		exit 1
+	fi
+
 	if [ "${DIREKT_SOFTWARE_GL:-0}" = 1 ]; then
 		usar_llvmpipe
 	fi
 
-	if [ "$motor" = "quakespasm" ]; then
-		[ -n "$qs" ] || { echo "este paquete no trae el motor ligero" >&2; exit 1; }
-		echo "  Motor: Quakespasm (ligero)"
-		exec "$qs" -basedir "$AQUI/datos" -basedir "$AQUI" -game direkt "$@"
+	[ -n "$qs" ] || { [ "$motor" != "quakespasm" ] || {
+		echo "este paquete no trae el motor ligero" >&2; exit 1; }; }
+	lanzar "$motor" "$@"
+}
+
+# Arranca un motor. Si se muere durante el arranque con un error de OpenGL, se
+# reintenta con el otro sin preguntar.
+#
+# Hay GPUs que anuncian OpenGL 4.3 o mas y luego no cumplen: el motor pide
+# storage buffers en el vertex shader y hay controladoras que contestan cero. El
+# shader no llega a compilar y el motor suelta un volcado del compilador de GLSL
+# que no dice nada util. Aqui no se arregla eso, pero si se hace que el juego
+# siga funcionando con el otro motor, que dibuja lo mismo sin pedir eso.
+lanzar() {
+	local motor="$1"; shift
+	local ejec otro log rc
+
+	case "$motor" in
+	quakespasm) ejec="$QUAKESPASM"; otro="ironwail" ;;
+	*)          ejec="$IRONWAIL";    otro="quakespasm" ;;
+	esac
+
+	echo "  Motor: $(nombre_de_motor "$motor")"
+	log="$(mktemp)"
+
+	# La salida pasa por tee para poder leerla despues. No es un problema para
+	# jugar: la consola del juego se dibuja en la ventana, no en la terminal.
+	# stdbuf saca la salida linea a linea. Sin esto el motor ligero guarda la
+	# consola en un bucle y no suelta nada hasta salir, de modo que al pasar por
+	# un pipe el log se queda vacio durante toda la partida y el chequeo de
+	# "esto ha fallado" de mas abajo no serviria de nada.
+	set +e
+	${STDBUF[@]+"${STDBUF[@]}"} "$ejec" \
+		-basedir "$AQUI/datos" -basedir "$AQUI" -game direkt "$@" 2>&1 | tee "$log"
+	rc="${PIPESTATUS[0]}"
+	set -e
+
+	if (( rc == 0 )); then
+		rm -f "$log"
+		return 0
 	fi
 
-	echo "  Motor: Ironwail (OpenGL 4.3)"
-	exec "$IRONWAIL" -basedir "$AQUI/datos" -basedir "$AQUI" -game direkt "$@"
+	# Se comprueba si lo que fallo es de arranque. Si el jugador cierra el juego
+	# normalmente el codigo es 0 y aqui no se llega.
+	if ! grep -qE "QUAKE ERROR|ERROR-OUT|error was encountered during OpenGL" "$log"; then
+		rm -f "$log"
+		return "$rc"
+	fi
+
+	local bin_otro
+	if [ "$otro" = "quakespasm" ]; then
+		bin_otro="$AQUI/bin/quakespasm"; [ -x "$bin_otro" ] || bin_otro="$AQUI/bin/quakespasm.exe"
+	else
+		bin_otro="$IRONWAIL"
+	fi
+	if [ ! -x "$bin_otro" ]; then
+		rm -f "$log"
+		return "$rc"
+	fi
+
+	echo
+	echo "  ------------------------------------------------------------------------"
+	echo "  El motor $(nombre_de_motor "$motor") no ha podido arrancar en esta maquina."
+	echo
+	sed -n '/QUAKE ERROR/,+2p' "$log" | sed 's/^/    /'
+	echo
+	echo "  Es el mismo juego, los mismos mapas y el mismo codigo: solo cambia el"
+	echo "  dibujado. Se reintenta con $(nombre_de_motor "$otro"), que pide mucho"
+	echo "  menos a la tarjeta."
+	echo "  Para dejar ese motor siempre:"
+	echo "      ./direkt.sh motor $otro"
+	echo "  ------------------------------------------------------------------------"
+	echo
+	rm -f "$log"
+
+	[ "$otro" = "quakespasm" ] && QUAKESPASM="$bin_otro" || IRONWAIL="$bin_otro"
+	lanzar "$otro" "$@"
+}
+
+nombre_de_motor() {
+	case "$1" in
+	quakespasm) echo "Quakespasm (ligero, OpenGL 1.5)" ;;
+	*)          echo "Ironwail (OpenGL 4.3)" ;;
+	esac
 }
 
 # Dice si el mundo ya esta listo en un log, sea cual sea el motor.
@@ -481,10 +581,6 @@ mundo_listo() {
 # Se declara con array y no con "[ ... ] && ..." porque con set -e, si la
 # condicion es falsa, el script se para. Y se invoca con ${arr[@]+...} porque el
 # bash 3.2 de macOS peta con "${arr[@]}" si el array esta vacio y hay set -u.
-STDBUF=()
-if command -v stdbuf >/dev/null 2>&1; then
-	STDBUF=(stdbuf -oL -eL)
-fi
 
 # Comprobacion autonoma: no necesita el arbol de desarrollo ni fteqcc, solo lo
 # que va en el paquete.
@@ -579,6 +675,21 @@ shell)   echo "PATH=$AQUI/bin:$PATH"; exec "${SHELL:-/bin/sh}" ;;
 esac
 FIN
 chmod +x "$STAGE/direkt.sh"
+
+# El lanzador se comprueba aqui, y no antes, porque va dentro de un heredoc: para
+# bash -n scripts/portable.sh es texto, no codigo, y no lo parsea. Se ha colado
+# mas de una vez un error de comillas en el lanzador que solo aparecia en el
+# paquete ya generado, con el mensaje "syntax error near unexpected token".
+# Un paquete con el lanzador roto es inservible y no se nota hasta que alguien
+# lo descomprime.
+if command -v bash >/dev/null 2>&1; then
+	if ! bash -n "$STAGE/direkt.sh"; then
+		echo "ERROR: el lanzador generado tiene un error de sintaxis." >&2
+		echo "       Revisa el heredoc de direkt.sh en scripts/portable.sh." >&2
+		exit 1
+	fi
+	echo "    lanzador ok ($(wc -l <"$STAGE/direkt.sh") lineas)"
+fi
 
 # Envoltorios para los sistemas que no ejecutan un .sh con doble clic.
 case "$OS" in
