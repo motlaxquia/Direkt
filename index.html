@@ -15,7 +15,6 @@
   --gris-2:  rgba(0,0,0,.42);
   --pico:    5deg;   /* punta de la estrella */
   --pico-g:  10deg;  /* una punta y su hueco */
-  --mordida: 13px;   /* grosor del borde de dientes */
 }
 
 *{box-sizing:border-box}
@@ -54,27 +53,25 @@ body::before{
 }
 
 /* ------------------------------------------------------------------
-   El motivo: cuadros de bordes puntiagudos.
-   El borde es un conic-gradient repetido, que desde el centro saca dientes
-   triangulares. El contenido va dentro de un recuadro blanco, asi que los
-   dientes quedan solo en el marco y el texto nunca se recorta.
+   Antes estos marcos tenian dientes: un conic-gradient repetido que sacaba
+   triangulos desde el centro. Se veia mal, enreda la lectura y hacia que los
+   botones parecieran algo distinto de los demas. Ahora es un rectangulo
+   con borde normal, y el unico acento es el relleno al pasar el raton.
+
+   La clase se llama .dientes por historicos: hay HTML que la usa y no compensa
+   la pena renombrarla. Lo que pinta es ya lo contrario.
    ------------------------------------------------------------------ */
 .dientes{
-  --pin: var(--mordida);
-  --pico: 5deg;
-  --pico-g: 10deg;
-  padding:var(--pin);
-  background:repeating-conic-gradient(from 0deg at 50% 50%,
-              var(--tinta) 0 var(--pico), var(--papel) var(--pico) var(--pico-g));
+  --pin: 2px;
+  border:2px solid var(--tinta);
 }
 .dientes > .dentro{
-  background:var(--papel);
   height:100%;
 }
 
-/* Los dientes grandes, para el boton de descarga. */
-.dientes--grande{--pin:18px; --pico:3.2deg; --pico-g:6.4deg}
-.dientes--fino  {--pin:9px;  --pico:6deg;   --pico-g:12deg}
+/* El boton grande es el que la gente pulsa, asi que respira mas que el resto. */
+.dientes--grande{--pin:0}
+.dientes--fino  {--pin:0}
 
 
 .enlace-dientes{
@@ -85,8 +82,8 @@ body::before{
 }
 .enlace-dientes:hover .dentro,
 .enlace-dientes:focus-visible .dentro{background:var(--tinta); color:var(--papel)}
-.enlace-dientes:hover{outline:3px solid var(--tinta); outline-offset:4px}
-.enlace-dientes:focus-visible{outline:3px solid var(--tinta); outline-offset:4px}
+.enlace-dientes:hover{outline:3px solid var(--tinta); outline-offset:2px}
+.enlace-dientes:focus-visible{outline:3px solid var(--tinta); outline-offset:2px}
 
 /* ------------------------------------------------------------------ */
 
@@ -179,7 +176,7 @@ a:hover{text-decoration-thickness:2px}
   flex-direction:column;
   align-items:center;
   gap:.15rem;
-  padding:.7rem 1.15rem;
+  padding:.85rem 1.3rem;
   text-decoration:none;
   color:var(--tinta);
   text-align:center;
@@ -199,7 +196,7 @@ a:hover{text-decoration-thickness:2px}
   color:var(--papel);
 }
 .plataformas-lista a:hover,
-.plataformas-lista a:focus-visible{outline:none}
+.plataformas-lista a:focus-visible{outline:2px solid var(--tinta); outline-offset:2px}
 
 /* El del sistema que ha detectado el script. No se oculta el resto: estan
    todos, porque hay gente que descarga para otra maquina. Lo que se hace es
@@ -249,7 +246,7 @@ a:hover{text-decoration-thickness:2px}
 
 .boton{
   text-align:center;
-  padding:1.5rem 1.25rem;
+  padding:2.2rem 1.5rem;
   cursor:pointer;
 }
 .boton .grito{

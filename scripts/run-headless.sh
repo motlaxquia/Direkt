@@ -18,7 +18,17 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY_CMD="$(command -v python3 || command -v python || true)"
 [[ -n "$PY_CMD" ]] || { echo "ERROR: hace falta python3 o python" >&2; exit 1; }
 BUILD="$REPO_ROOT/build"
-ENGINE_BIN="$BUILD/bin/ironwail"
+# Se puede probar el otro motor con DIREKT_TEST_ENGINE=quakespasm. Los dos
+# llevan el mismo progs.dat y los mismos mapas, asi que las pruebas tienen que
+# dar lo mismo en los dos.
+# Se puede probar el otro motor con DIREKT_TEST_ENGINE=quakespasm. Los dos
+# llevan el mismo progs.dat y los mismos mapas, asi que las pruebas tienen que
+# dar lo mismo en los dos.
+if [[ -n "${DIREKT_TEST_ENGINE:-}" ]]; then
+	ENGINE_BIN="$BUILD/bin/$DIREKT_TEST_ENGINE"
+else
+	ENGINE_BIN="$BUILD/bin/ironwail"
+fi
 LQ="$BUILD/lq/full"          # basedir: el motor exige <basedir>/id1/pak0.pak
 GAMEDIR_NAME="direkt"
 LOGS="$BUILD/logs"
@@ -97,6 +107,7 @@ rm -f "$LOG" "$SHOTS/$MAP.png"
 #   * el motor trunca la linea de comandos a 255 caracteres, asi que todo lo
 #     que no quepa tiene que ir aqui y no en los argumentos.
 TESTCFG="direkt-test.cfg"
+CFG_TMP="$LOGS/$TESTCFG.creando"
 {
   echo "// generado por scripts/run-headless.sh, no editar a mano"
   echo 'echo "DIREKT:cfg-executed"'
@@ -105,7 +116,20 @@ TESTCFG="direkt-test.cfg"
   [[ $TURN -eq 1 ]] && echo '+right'
   [[ $JUMP -eq 1 ]] && echo '+jump'
   printf '%s\n' "${CFG_LINE[@]}"
-} >"$REPO_ROOT/$GAMEDIR_NAME/$TESTCFG"
+} >"$CFG_TMP"
+
+# Ironwail busca en el segundo -basedir, pero Quakespasm solo mira el primero, con
+# lo que la cfg hay que dejarla en los dos. Si solo se escribe en uno, el otro
+# motor avisa "couldn't exec <cfg>" y las pruebas que dependen de ella fallan.
+CFG_DESTINOS=(
+  "$REPO_ROOT/$GAMEDIR_NAME"
+  "$REPO_ROOT/build/lq/full/$GAMEDIR_NAME"
+)
+for _dir in "${CFG_DESTINOS[@]}"; do
+  mkdir -p "$_dir"
+  cp "$CFG_TMP" "$_dir/$TESTCFG"
+done
+rm -f "$CFG_TMP"
 
 # Rutas relativas a proposito: argv[0] entra tambien en la linea de comandos que
 # el motor trunca, y las rutas absolutas de este repo se comen ~40 caracteres.
@@ -120,6 +144,7 @@ args=(
   -width "$WIDTH"
   -height "$HEIGHT"
   +exec "$TESTCFG"
+  +set scr_drawsb 0
   +map "$MAP"
   +echo "DIREKT:map-command-issued"
 )

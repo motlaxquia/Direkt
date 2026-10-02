@@ -17,6 +17,28 @@
     See file, 'COPYING', for details.
 */
 
+// -----------------------------------------------------------------------------
+// CONSTANTES DEL JUEGO
+//
+// Van aqui, y no donde las usen, por dos motivos:
+//
+//   1. player.qc necesita DIREKT_MAX_HEALTH al terminar su selftest de objetos,
+//      y player.qc se incluye ANTES que client.qc. Un #define solo existe a
+//      partir de donde esta escrito, asi que tiene que estar antes que las dos.
+//   2. Y tiene que ser #define y no una variable global porque declararla entre
+//      los globales del sistema (que empiezan justo debajo) la insertaria en
+//      medio de la tabla y desplazaria los siguientes. El motor lo comprueba al
+//      cargar el progs.dat y aborta con "progs.dat system vars have been
+//      modified, progdefs.h is out of date". Un #define no ocupa sitio en la
+//      tabla, con lo que no la altera.
+//
+// Una vida. Un toque y se muere.
+//
+// Con 100 de vida la barra de abajo era ademas el unico sitio donde se veia
+// cuanta vida quedaba, y con una vida eso ya no aporta nada. El jugador es
+// fragil a proposito: por eso no se dibuja la barra de estado.
+#define DIREKT_MAX_HEALTH 1
+
 /*==============================================================================
 
 			SOURCE FOR GLOBALVARS_T C STRUCTURE

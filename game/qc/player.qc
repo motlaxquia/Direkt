@@ -570,12 +570,22 @@ void() direkt_selftest_paso =
 		localcmd(" echo DIREKT: fin del selftest");
 		self.think = direkt_nada;
 		self.nextthink = 0;
+		// Se devuelve al jugador a la vida que tiene en el juego, que es una.
+		self.max_health = DIREKT_MAX_HEALTH;
+		self.health = DIREKT_MAX_HEALTH;
 		return;
 	}
 
-	// Se deja al jugador sin vida y sin armadura para que cualquier objeto
-	// tenga sitio donde entrar. Con la vida llena los botiquines se rechazan
+	// Se deja al jugador con sitio de vida y sin armadura para que cualquier
+	// objeto tenga donde entrar. Con la vida llena los botiquines se rechazan
 	// solos y la prueba no diria nada.
+	//
+	// El maximo se sube TAMBIEN, y no solo la vida. El jugador del juego tiene
+	// una sola vida, y con max_health a 1 el motor recorta la vida al maximo en
+	// cuanto recibe dano: el jugador se quedaba a 1, cualquier objeto que
+	// hiciera dano lo mataba y el recorrido se cortaba en el primero. Aqui solo
+	// se toca durante la prueba; al terminar se devuelve el valor del juego.
+	self.max_health = 100;
 	self.health = 30;
 	self.armorvalue = 0;
 

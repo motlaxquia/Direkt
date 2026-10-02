@@ -29,7 +29,11 @@
 // que hacia la primera version, que ponia velocity a cero y FL_ONGROUND en
 // cada PostThink.
 
-float DIREKT_MAX_HEALTH = 100;
+// La vida del jugador (DIREKT_MAX_HEALTH) esta definida al principio de
+// defs.qc, como #define, para que la puedan usar client.qc y player.qc. Alli esta
+// el motivo de que sea un #define y no una variable.
+
+// Peso de la gravedad del jugador. Se toca para los saltos y el agua.
 float DIREKT_GRAVITY_SCALE = 1;
 
 // ---------------------------------------------------------------- baggage
@@ -106,7 +110,13 @@ void() PutClientInServer =
 	self.classname = "player";
 	self.health = DIREKT_MAX_HEALTH;
 	self.max_health = DIREKT_MAX_HEALTH;
+	// Sin armadura: si no, el primer toque se lo come la armadura antes de que
+	// haga dano y "un toque y muere" dejaria de ser cierto.
 	self.armorvalue = 0;
+	self.ammo_shells = 0;
+	self.ammo_nails = 0;
+	self.ammo_rockets = 0;
+	self.ammo_cells = 0;
 	self.takedamage = DAMAGE_AIM;
 	self.deadflag = DEAD_NO;
 	self.solid = SOLID_SLIDEBOX;

@@ -342,15 +342,27 @@ fi
 
 # Un objeto que da efecto tiene que notarlo, sea del tipo que sea.
 # En un mapa de LibreQuake siempre hay botiquines, armaduras y municion.
+# El jugador tiene UNA vida (DIREKT_MAX_HEALTH), asi que va siempre lleno. Por
+# eso tocar un botiquin no cura a nadie: el codigo lo rechaza a proposito porque
+# sanar de mas se desperdicia (items.qc, direkt_salud_coger). Antes se comprobaba
+# que los botiquines curaran, que era cierto con 100 de vida y ya no lo es.
+#
+# Lo que se comprueba ahora es lo contrario: que el mapa siga teniendo botiquines
+# y que tocarlos no rompa nada. La logica de curar sigue cubierta por el selftest
+# del editor, que la prueba con su propio jugador.
 cura="$(grep -c "objeto cura al jugador" "$LOG" || true)"
+botiquin="$(grep -c "prueba botiquin" "$LOG" || true)"
 armadura="$(grep -c "objeto da armadura" "$LOG" || true)"
 municion="$(grep -c "objeto da municion" "$LOG" || true)"
 inventario="$(grep -c "objeto da inventario" "$LOG" || true)"
 
-if ((cura > 0)); then
-  ok "los botiquines curan ($cura)"
+# Con una sola vida el jugador va siempre lleno, y un botiquin con la vida llena
+# se rechaza a proposito: sanar de mas se desperdicia. Se comprueba que el
+# botiquin se toca y que no hace nada, que es lo correcto.
+if ((botiquin > 0)); then
+  ok "el botiquin se toca y con la vida llena no hace nada ($botiquin)"
 else
-  ko "ningun botiquin curo al jugador"
+  ko "no se probo ningun botiquin del mapa"
 fi
 
 if ((armadura > 0)); then

@@ -35,3 +35,6 @@ game/*.o
 
 # Configuracion y estado que escribe el motor al arrancar
 direkt/direkt-test.cfg
+
+# written by the engines in the repo root
+history.txt
