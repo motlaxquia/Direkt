@@ -34,30 +34,6 @@
  COMMON_LIBS= -lGL
  else
  COMMON_LIBS= -lGL -lm
---- orig/Quake/net_sys.h	2026-08-11 20:10:10.000000000 +0000
-+++ new/Quake/net_sys.h	2026-10-01 23:37:20.562236789 +0000
-@@ -160,10 +160,20 @@
- typedef int	socklen_t;
- #endif	/* socklen_t type */
- 
-+/* __WSAE_StrError, que usa socketerror() mas abajo, sale de wsaerror.h, y el
-+ * comentario de al lado ya avisa de que hay que incluirla. No lo hacia nadie, y
-+ * con MinGW salia "implicit declaration of function __WSAE_StrError". Con MSVC el
-+ * orden de inclusiones lo tapaba por casualidad. */
-+#include "wsaerror.h"
-+
- typedef SOCKET	sys_socket_t;
- 
- #define	selectsocket	select
--#define	IOCTLARG_P(x)	/* (u_long *) */ x
-+
-+/* ioctlsocket() quiere un u_long *, no un int *. La macro estaba definida aqui
-+ * pero SIN conversion, y el resultado era "passing argument 3 of ioctlsocket
-+ * from incompatible pointer type" al compilar con MinGW. */
-+#define	IOCTLARG_P(x)	((u_long *) (x))
- 
- #define	SOCKETERRNO	WSAGetLastError()
- #define	NET_EWOULDBLOCK		WSAEWOULDBLOCK
 --- orig/Quake/main_sdl.c	2026-08-11 20:10:10.000000000 +0000
 +++ new/Quake/main_sdl.c	2026-10-01 23:37:20.562236789 +0000
 @@ -65,7 +65,13 @@
