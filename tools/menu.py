@@ -24,6 +24,12 @@ que la ventana abra al instante. Y si no hay red, o el usuario esta sin conexion
 solo se avisa: el menu no impide jugar por eso.
 """
 
+# Sin esto, las anotaciones que mencionan tk (por ejemplo "-> tk.Frame") se
+# evaluan al importar el modulo, y en un Python sin tkinter -- que es lo que
+# pasa en parte de los entornos de compilacion -- reventan con un AttributeError
+# de None. Con esto quedan como texto y solo hacen falta si se llega a dibujar.
+from __future__ import annotations
+
 import argparse
 import json
 import platform
