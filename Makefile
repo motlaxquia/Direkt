@@ -198,6 +198,7 @@ test: engine game game-noshowcase bsp edit
 	@$(REPO)/scripts/smoke-test.sh
 	@$(REPO)/scripts/bsp-test.sh $(BSP_TEST_ARGS)
 	@$(REPO)/scripts/editor-test.sh $(EDITOR_TEST_ARGS)
+	@$$(command -v python3 || command -v python) $(REPO)/tools/menu.py --probar
 
 # ------------------------------------------------ motor de recursos bajos
 #

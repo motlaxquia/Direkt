@@ -494,6 +494,14 @@ cd direkt-portable-linux</pre>
       <div class="dientes dientes--fino paso">
         <span class="dentro">
           <span class="n">3</span>
+          <h3>O salta el menu</h3>
+          <pre>./direkt.sh jugar</pre>
+        </span>
+      </div>
+
+      <div class="dientes dientes--fino paso">
+        <span class="dentro">
+          <span class="n">4</span>
           <h3>Compila un mapa</h3>
           <pre>./direkt.sh bsp mapa.map salida.bsp</pre>
         </span>
@@ -559,12 +567,33 @@ d51e9969597ca529d4f433910c04e1939e0a08bd657e296326af0fdf212b68bf  direkt-portabl
     </p>
   </section>
 
+  <!-- ================= MENU ================= -->
+  <section class="seccion" aria-labelledby="t-menu">
+    <h2 id="t-menu">El menu</h2>
+
+    <p>Al descomprimir y abrir el paquete aparece una ventana con un lateral y
+    cuatro entradas: <b>Jugar</b>, <b>Minijuego</b>, <b>Descargas</b> y
+    <b>Salir</b>. Desde ahi se juega, se mira si hay una release nueva y se
+    echapuera un rato al minijuego de pulsar botones.</p>
+
+    <p>El menu esta hecho en Python con <code>tkinter</code>, que ya viene en la
+    mayoria de las instalaciones. Y no hace falta: si no esta, el lanzador lo
+    avisa y entra al juego igualmente. Para entrar sin menu:</p>
+
+    <pre class="hash">./direkt.sh jugar</pre>
+
+    <p>Lo unico imprescindible para jugar es el motor, que ya va dentro del
+    paquete.</p>
+  </section>
+
   <!-- ================= COMANDOS ================= -->
   <section class="seccion" aria-labelledby="t-cmd">
     <h2 id="t-cmd">Todos los comandos</h2>
     <div class="dos-columnas">
       <ul class="lista">
-        <li><code>./direkt.sh</code> — jugar</li>
+        <li><code>./direkt.sh</code> — abrir el menu</li>
+        <li><code>./direkt.sh jugar</code> — jugar sin pasar por el menu</li>
+        <li><code>./direkt.sh menu</code> — abrir solo el menu</li>
         <li><code>./direkt.sh test</code> — comprobar que el paquete arranca de verdad</li>
         <li><code>./direkt.sh editor</code> — abrir el editor de niveles</li>
       </ul>

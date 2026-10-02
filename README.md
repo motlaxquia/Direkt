@@ -175,6 +175,37 @@ Los dos motores llevan el mismo `progs.dat` y los mismos mapas, así que las
 pruebas tienen que dar lo mismo en los dos. `scripts/run-headless.sh` acepta
 `DIREKT_TEST_ENGINE=quakespasm` para probar el ligero.
 
+## El menu
+
+El paquete portable se abre con un menu de ventana: `tools/menu.py`, que va al
+paquete como `direkt-menu.py`.
+
+```sh
+python3 tools/menu.py             # ventana
+python3 tools/menu.py --probar    # pruebas, sin pantalla
+python3 tools/menu.py --comprobar # solo consulta la release y sale
+```
+
+El lateral tiene cuatro entradas: **Jugar**, **Minijuego**, **Descargas** y
+**Salir**.
+
+Tres cosas que conviene tener claras sobre el diseño:
+
+*   **El menu no arranca el juego.** Llama a `direkt.sh`, que es quien ya sabe
+    lanzar el motor, reintentar con el otro y todo lo demás. La lógica de
+    arranque vive en un solo sitio.
+*   **La consulta de la release va en un hilo aparte**, y ese hilo no toca Tk:
+    deja el resultado en una `queue` y es el hilo principal, con su `after`, quien
+    lo pinta. Tk no se puede llamar desde fuera de su hilo, y si el usuario
+    cierra la ventana mientras se consulta, reventaba el proceso entero.
+*   **No es obligatorio.** Sin Python, sin `tkinter` o sin display, el lanzador
+    avisa y entra al juego igualmente. Para eso `direkt.sh jugar` existe.
+
+El minijuego son botones que aparecen en un sitio al azar y duran de 1 a 5
+segundos, con una barra que se encoge para ver cuánto queda. Dura 30 segundos.
+Las reglas están en la clase `Minijuego`, separada de la ventana, para que se
+puedan probar sin pantalla.
+
 ## Mapas propios: `direkt-bsp`
 
 Ni Ironwail ni LibreQuake traen compilador de mapas, y LibreQuake no distribuye

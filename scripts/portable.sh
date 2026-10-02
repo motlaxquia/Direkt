@@ -82,6 +82,13 @@ mkdir -p "$STAGE"
 # --- binarios y logica de juego ---------------------------------------------
 echo "    binarios"
 mkdir -p "$STAGE/bin" "$STAGE/direkt"
+
+# El menu va suelto en la raiz, junto al lanzador, porque es lo primero que ve
+# quien abre el paquete. Sin el .py3, que es para ejecutarlo sin teclear
+# "python", porque en Windows no siempre hay una associacion de ficheros.
+cp "$REPO/tools/menu.py" "$STAGE/direkt-menu.py"
+cp "$REPO/tools/menu.py" "$STAGE/direkt-menu.py3"
+chmod +x "$STAGE/direkt-menu.py" "$STAGE/direkt-menu.py3"
 # En Windows los binarios se llaman .exe, y en los demas no. No se deja que sea
 # el shell el que resuelva el nombre: cp no siempre anade el .exe por su cuenta,
 # y un cp que falla a mitad del empaquetado se lleva por delante el stage entero.
@@ -253,6 +260,29 @@ el dibujado. Quakespasm es mucho menos exigente con la tarjeta.
     DIREKT_SOFTWARE_GL=1 ./direkt.sh         # ir siempre por software
     DIREKT_MOTOR=ironwail ./direkt.sh        # forzar el motor principal
     DIREKT_MOTOR=quakespasm ./direkt.sh      # forzar el motor ligero
+
+## El menu
+
+Al abrir el paquete se abre el menu: una ventana con un lateral y cuatro cosas.
+
+    Jugar       arranca el juego
+    Minijuego   botones que aparecen y hay que pulsar antes de que se acaben
+    Descargas   si hay una release nueva, y los ficheros de esta
+    Salir
+
+Es la via normal para jugar. Se puede entrar al juego saltandoselo:
+
+    ./direkt.sh jugar
+
+El menu necesita **Python 3 con tkinter**, que ya viene en la mayoria de las
+instalaciones. Si no esta, o si no hay ventana (por ejemplo, por SSH), el
+lanzador lo dice y entra al juego igualmente. En Linux, si falta:
+
+    sudo apt install python3-tk
+
+Lo que busca la pagina de descargas es la release del repositorio, para
+compararla con la del paquete. Es solo un aviso: si no hay red, el menu funciona
+igual y el juego se puede jugar sin problema.
 FIN
 	;;
 esac
@@ -268,7 +298,8 @@ cat > "$STAGE/direkt.sh" <<'FIN'
 #!/usr/bin/env bash
 # Lanzador de Direkt.
 #
-#   ./direkt.sh            abre el juego
+#   ./direkt.sh            abre el menu, y el juego desde ahi
+#   ./direkt.sh jugar      abre el juego directamente, sin menu
 #   ./direkt.sh test       comprueba que el paquete arranca de verdad
 #   ./direkt.sh editor     abre el editor de niveles
 #   ./direkt.sh bsp a b    compila el mapa a en b.bsp
@@ -661,7 +692,46 @@ comprobar() {
 	return "$rc"
 }
 
-case "${1:-jugar}" in
+# El menu es una ventana de Python (tools/menu.py, que aqui va como
+# direkt-menu.py). Es la puerta de entrada: desde el se juega, se mira si hay
+# release nueva y esta el minijuego.
+#
+# Pero NO es obligatorio. Si el Python de esta maquina no trae tkinter, o no hay
+# Python, el juego entra igual y sin pedir nada, que es lo unico imprescindible.
+menu() {
+	local py=""
+	local candidato
+	for candidato in python3 python; do
+		if command -v "$candidato" >/dev/null 2>&1; then
+			py="$candidato"
+			break
+		fi
+	done
+	if [ -z "$py" ]; then
+		echo "No hay Python en este equipo, asi que no se puede abrir el menu." >&2
+		echo "Se juega directamente. Para el menu hace falta Python 3 con tkinter." >&2
+		jugar
+		return
+	fi
+	if ! "$py" -c "import tkinter" >/dev/null 2>&1; then
+		echo "Este Python no trae tkinter, que es lo que dibuja el menu." >&2
+		echo "Se juega directamente. En Linux: sudo apt install python3-tk" >&2
+		jugar
+		return
+	fi
+	local salida=0
+	"$py" "$AQUI/direkt-menu.py" --raiz "$AQUI" "$@" || salida=$?
+	# Un 2 es "no se pudo abrir una ventana" (sin display, o tkinter roto). No es
+	# motivo para quedarse sin juego: se entra directamente.
+	if [ "$salida" = 2 ]; then
+		echo "Se juega directamente." >&2
+		jugar
+	fi
+	return "$salida"
+}
+
+case "${1:-menu}" in
+menu)    shift || true; menu "$@" ;;
 jugar)   jugar ;;
 motor)
 	case "${2:-}" in

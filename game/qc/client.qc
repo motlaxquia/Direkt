@@ -110,8 +110,8 @@ void() PutClientInServer =
 	self.classname = "player";
 	self.health = DIREKT_MAX_HEALTH;
 	self.max_health = DIREKT_MAX_HEALTH;
-	// Sin armadura: si no, el primer toque se lo come la armadura antes de que
-	// haga dano y "un toque y muere" dejaria de ser cierto.
+	// Sin armadura: si no, el primer toque se lo come la armadura antes de
+	// que haga dano, y "un toque y muere" dejaria de ser cierto.
 	self.armorvalue = 0;
 	self.ammo_shells = 0;
 	self.ammo_nails = 0;
