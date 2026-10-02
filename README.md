@@ -33,9 +33,9 @@ cd direkt-portable-linux
 SHA-256 del paquete:
 
 ```
-855adda9f968791190767c7bdc4f9895f39509c7919b1527e282361896081acc  direkt-portable-linux.tar.gz
-d97edf33f58b72625e3bc16568b8d380753cf3c86864eaef119b64f136a75dc7  direkt-portable-macos.tar.gz
-899bf60379b00921dd0f76aa7b6bfa4fd16d5efa8c7786bb8f66e3d0e00c8162  direkt-portable-windows.zip
+7dce246e415cbfe4ba073dfac23732fd7fee9ac87b79d06cfcf0bb02850939c0  direkt-portable-linux.tar.gz
+eb158ed8bde378cca6f75590ad5059c06f42718e8c16e07e1d101bfcfeaa75ed  direkt-portable-macos.tar.gz
+abe45e57d8c844eb2282cb466c1c0b3af3d5c40fd2c8804998795745be7c2e0c  direkt-portable-windows.zip
 ```
 
 **El motor pide OpenGL 4.3**, porque dibuja el mundo con *compute shaders*. En
@@ -63,8 +63,20 @@ DIREKT_MOTOR=ironwail ./direkt.sh     # el motor principal (OpenGL 4.3)
 DIREKT_MOTOR=quakespasm ./direkt.sh   # el motor ligero (OpenGL 1.5)
 ```
 
-Si un motor peta al arrancar con un error de OpenGL o de shaders, prueba con el
-otro: es el mismo juego con otro dibujado.
+### Si un motor no arranca
+
+El lanzador lo mira. Si el motor elegido se muere durante el arranque con un
+error de OpenGL, arranca con el otro sin preguntar. Es el mismo juego con otro
+dibujado.
+
+Pasa con GPUs que anuncian OpenGL 4.3 o más y luego no cumplen: hay
+controladoras que dan cero storage buffers en el vertex shader, que es lo que
+el motor necesita para el shader del mundo, y el programa de siempre es un
+volcado del error del compilador de GLSL. Para dejar el otro motor siempre:
+
+```sh
+./direkt.sh motor quakespasm
+```
 
 ### Equipos sin OpenGL 4.3
 
