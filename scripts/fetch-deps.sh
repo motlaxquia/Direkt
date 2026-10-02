@@ -145,13 +145,17 @@ fetch_quakespasm() {
     info "extrayendo quakespasm"
     rm -rf "$dir"
     mkdir -p "$dir"
-    # Se descartan los SDL2 prefabricados del tarball (MacOSX/, Linux/,
-    # Windows/): aqui el SDL2 es el del sistema. Y en Windows no se pueden
-    # desempaquetar, porque el framework de macOS va con enlaces simbolicos y el
-    # tar de MSYS2 no puede crearlos sin permisos de administrador. Asi que el
-    # Descargas se quedaba a medias con "Cannot create symlink".
+    # Solo se descarta MacOSX/, que es un SDL2 prefabricado que aqui no se usa
+    # porque el SDL2 es el del sistema. Y es el unico sitio del tarball con
+    # enlaces simbolicos, que el tar de MSYS2 no puede crear sin permisos de
+    # administrador: con el directorio entero, el Descargas se quedaba a medias
+    # con "Cannot create symlink" y make deps moria.
+    #
+    # Linux/ y Windows/ se dejan. En Windows/ esta el QuakeSpasm.rc, que
+    # Makefile.w64 necesita para el icono del ejecutable; si no esta, falla con
+    # "No rule to make target QuakeSpasm.res".
     tar -xzf "$tarball" -C "$dir" --strip-components=1 \
-      --exclude='*/MacOSX' --exclude='*/Linux' --exclude='*/Windows'
+      --exclude='*/MacOSX'
     touch "$dir/.direkt-stamped"
   fi
   aplicar_parches "$dir" quakespasm

@@ -33,7 +33,7 @@ cd direkt-portable-linux
 SHA-256 del paquete:
 
 ```
-1d748ba072db039e29ad952fb57fd56b8e18325865f0de8c0918fe3b6e131e3c  direkt-portable-linux.tar.gz
+0dfe3f51007dce0b5f5e8928311556c7120e9e60107c48e1939768fb3cbd7204  direkt-portable-linux.tar.gz
 9726976128d0796635126a84323bd154df092a93d34546c8a94e6c636bad630a  direkt-portable-macos.tar.gz
 df527f087b6a7e523cf47cd6465ed675350279dda87b055d0828b503a4fd7cb2  direkt-portable-windows.zip
 ```
