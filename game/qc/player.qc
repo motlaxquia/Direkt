@@ -608,16 +608,25 @@ void(entity victima) direkt_muerte_jugador =
 	victima.velocity = VEC_ORIGIN;
 	victima.flags = 0;
 
-	// El aviso de abajo y el ENTER para reintentar. El texto lo dibuja el motor
-	// (cvar scr_msgline, parche nuestro); desde aqui solo se le avisa.
-	//
-	// El cvar se asigna a pelo, sin "set" delante, porque "set" no existe en
-	// Ironwail: responde "Unknown command set" y no hace nada. Escribir
-	// "scr_msgline valor" a pelo es la forma que los dos motores entienden, y es
-	// la de siempre en Quake.
-	stuffcmd(victima, "scr_msgline \"moriste\\npulsa Enter para reintentar\"");
+	// El ENTER para reintentar se enlaza aqui. Esto SI funciona: "bind" es un
+	// comando normal y el motor lo ejecuta tal cual.
 	stuffcmd(victima, "bind KP_ENTER \"impulse 26\"");
 	stuffcmd(victima, "bind RETURN \"impulse 26\"");
+
+	// OJO, PENDIENTE: el aviso de "moriste" abajo todavia no se pone. La parte de
+	// dibujarlo esta HECHA y comprobada (cvar scr_msgline en el motor, con la
+	// vista ya sin la franja gris), pero el Camino para ponerlo desde aqui no
+	// funciona:
+	//
+	//   * stuffcmd(victima, "scr_msgline \"texto con espacios\"") llega al
+	//     motor sin las comillas, con lo que el cvar se queda con la primera
+	//     palabra y el resto se va como comandos sueltos. Se vio en el log.
+	//   * Con comillas tampoco: el cvar se queda sin cambiar.
+	//
+	// Ni en Ironwail ni en Quakespasm hay forma de pasar un texto con espacios
+	// desde QuakeC. Lo que queda por probar es mandar el texto partido en
+	// varios "scr_msgline" con un separador, o un comando del motor que lo lea de
+	// otro sitio. Hasta entonces el motor lo dibuja pero el juego no lo llama.
 
 	// El fantasma, y a los tres segundos, otra vez al principio.
 	victima.think = direkt_fantasma;
@@ -639,7 +648,6 @@ void() direkt_jugador_reintentar =
 	if (!self.deadflag)
 		return;
 
-	stuffcmd(self, "scr_msgline \"\"");
 	self.think = direkt_nada;
 	self.nextthink = 0;
 	PutClientInServer();
