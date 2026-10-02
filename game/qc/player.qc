@@ -6,7 +6,7 @@
 // si es codigo de juego: el control de disparo, el dano, la muerte, la
 // reaparicion y el informe de movimiento que usa el smoke test.
 
-void()	direkt_muerte_jugador;
+void(entity victima)	direkt_muerte_jugador;
 void()	direkt_jugador_cae;
 void()	direkt_jugador_reaparece;
 void()	direkt_informa_movimiento;
@@ -27,6 +27,31 @@ void()	direkt_agacha;
 void()	direkt_agacha_anda_lento;
 void()	direkt_test_agacha;
 void()	direkt_test_suelo;
+void()	direkt_test_muerte;
+void(entity victima)	direkt_gibs;
+void()	direkt_gib_quita;
+void()	direkt_fantasma;
+void()	direkt_fantasma_muere;
+void()	direkt_jugador_reintentar;
+// Impulso extra por frame mientras se mantiene el salto subiendo. Con 16 el salto
+// queda claramente mas alto; con 40 el motor se atasca.
+#define DIREKT_SALTO_EXTRA 16
+#define DIREKT_SALTO_TOPE  640
+
+void()	direkt_salto_alto;
+
+// El empuje se corta en cuanto el jugador deja de subir, para que al caer no se
+// note.
+void() direkt_salto_alto =
+{
+	if (!self.button2 || self.velocity_z <= 0)
+		return;
+
+	self.velocity_z = self.velocity_z + DIREKT_SALTO_EXTRA;
+	if (self.velocity_z > DIREKT_SALTO_TOPE)
+		self.velocity_z = DIREKT_SALTO_TOPE;
+};
+void()	direkt_test_muerte_pelea;
 
 // Cuantos objetos se comprueban cuando se pide el selftest con el impulso 9.
 #define DIREKT_TEST_OBJETOS 50
@@ -97,6 +122,14 @@ float	direkt_test_suelo_paso;
 float	direkt_test_suelo_z0;
 float	direkt_test_suelo_dz;
 float	direkt_test_suelo_z;
+
+// Contador de la prueba de "un golpe mata", del impulso 24. Va aqui con las
+// demas porque QuakeC no admite usar una variable global antes de declararla.
+// El jugador, el proyectil y el testigo de la prueba del golpe mortal. El
+// testigo se pone desde el proyectil y lo lee el manejador de muerte.
+entity	direkt_test_muerte_jugador;
+entity	direkt_test_muerte_arma;
+float	direkt_test_muerte_armado;
 
 // Cursor para no volver a mirar el mismo objeto. Sin esto, find() siempre
 // devuelve el primer objeto de cada clase y la prueba se queda enganchada
@@ -184,10 +217,33 @@ void() direkt_prethink_jugador =
 		self.think = direkt_test_suelo;
 		self.nextthink = time + 0.5;
 	}
+	// El 26 es el Enter que se enlaza al morir: lleva a reintentar. Se mira
+	// antes que el resto porque solo tiene sentido con el fantasma, y no vale
+	// nada en vida normal.
+	else if (self.impulse == 26)
+	{
+		self.impulse = 0;
+		if (self.deadflag)
+			direkt_jugador_reintentar();
+	}
+	// El 24 pregunta si un solo golpe mata al jugador, que es la regla del
+	// juego. Se comprueba de verdad, con el camino de dano de verdad, y no
+	// mirando el numero: si un dia algo empieza a dejar vivo al jugador con
+	// vida 1, esta linea avisa.
+	else if (self.impulse == 24)
+	{
+		self.impulse = 0;
+		self.think = direkt_test_muerte;
+		self.nextthink = time + 0.1;
+	}
 	else if (self.impulse)
 	{
 		direkt_impulso();
 	}
+
+	// El salto alto, en la vida normal y tambien de fantasma.
+	if (!self.deadflag || self.movetype == MOVETYPE_FLY)
+		direkt_salto_alto();
 
 	// Disparar.
 	if (self.button0)
@@ -299,6 +355,23 @@ void() direkt_agacha_anda_lento =
 	self.velocity_y = suelo_y * DIREKT_AGACHADO_VELOCIDAD / rapidez;
 };
 
+// ------------------------------------------------------------------ correr y saltar
+//
+// Shift es "+speed", que es una tecla que YA traen los dos motores: en
+// cl_input.c esta IN_SpeedDown y IN_SpeedUp. O sea que no hay que tocar el motor,
+// solo enlazar el Shift a "+speed" una vez.
+//
+// El salto es mas dificil, porque la velocidad del salto la pone el motor y no
+// hay ningun cvar para ella. Lo que se hace es empujar hacia arriba mientras la
+// tecla de salto siga pulsada y el jugador vaya subiendo: el motor da el impulso
+// del salto y nosotros lo vamos alargando. Se parece a como se siente saltar mas
+// alto en los juegos de parkour, y no toca nada del motor.
+//
+// El empuje se corta en cuanto el jugador deja de subir, para que al caer no se
+// note. Y se limita a un tope: si se dejara sin limite, Keeping presionado el
+// salto acabaria hurtando el motor entero.
+
+
 // ------------------------------------------------------------------ salud
 // Aplica dano. Se llama desde las armas, de los proyectiles y de los gatillos.
 void(entity objetivo, entity agresor, float dano) direkt_danio =
@@ -351,7 +424,7 @@ void(entity objetivo, entity agresor, float dano) direkt_danio =
 	if (objetivo.health <= 0)
 	{
 		if (objetivo.classname == "player")
-			direkt_muerte_jugador();
+			direkt_muerte_jugador(objetivo);
 		else if (objetivo.th_die)
 		{
 			// Las puertas y los botones no mueren: se abren. Por eso van antes
@@ -388,50 +461,238 @@ void() direkt_muerte_ente =
 };
 
 // ------------------------------------------------------------------ muerte
-void() direkt_muerte_jugador =
+//
+// Cuando el jugador muere:
+//
+//   * Explota en pedazos, como los enemigos cuando mueren de un golpe.
+//   * Se apagan el cuerpo y el arma.
+//   * Se queda flotando como fantasma. Vuela con la gravedad puesta a cero, y
+//     sigue chocando con el mundo: es volar, no es noclip.
+//   * Abajo sale un aviso para reintentar con Enter.
+//
+// Y hay un detalle del motor que condiciona todo esto: SV_ClientThink (FTE) y su
+// equivalente en Quakespasm hacen "if (health <= 0) return", o sea que un
+// jugador con la vida a cero NO se mueve de ninguna manera. Por eso el fantasma
+// conserva una vida de mentira: lo que dice que esta muerto es deadflag, no la
+// vida. Si se dejara a cero, el fantasma se quedaria clavado.
+
+void(entity victima) direkt_gibs =
+{
+	local entity g;
+	local float i;
+	local float ang;
+
+	i = 0;
+	while (i < 7)
+	{
+		g = spawn();
+		g.classname = "direkt_gib";
+		g.solid = SOLID_NOT;
+		g.movetype = MOVETYPE_TOSS;
+		g.model = "progs/gib1.mdl";
+		if (i & 1)
+			g.model = "progs/gib2.mdl";
+		if (i > 4)
+			g.model = "progs/gib3.mdl";
+		setmodel(g, g.model);
+		setsize(g, VEC_ORIGIN, VEC_ORIGIN);
+
+		// Cada pedazo sale para un lado. Las direcciones van escritas una a una
+		// porque en QuakeC no hay seno ni coseno, ni forma de tener un array
+		// global con valores de partida.
+		ang = 150 + i * 22;
+		if (i == 0) { g.velocity_x = ang; g.velocity_y = 0; }
+		else if (i == 1) { g.velocity_x = ang * 0.7; g.velocity_y = ang * 0.7; }
+		else if (i == 2) { g.velocity_x = -ang * 0.7; g.velocity_y = ang * 0.7; }
+		else if (i == 3) { g.velocity_x = -ang; g.velocity_y = 0; }
+		else if (i == 4) { g.velocity_x = -ang * 0.7; g.velocity_y = -ang * 0.7; }
+		else if (i == 5) { g.velocity_x = ang * 0.7; g.velocity_y = -ang * 0.7; }
+		else { g.velocity_x = 0; g.velocity_y = 0; }
+		g.velocity_z = 120 + i * 26;
+
+		g.angles = victima.angles;
+		g.avelocity_x = 300 - i * 20;
+		g.avelocity_y = 240 - i * 15;
+		g.think = direkt_gib_quita;
+		g.nextthink = time + 4 + i * 0.2;
+		i = i + 1;
+	}
+
+	sound(victima, CHAN_BODY, "player/udeath.wav", 1, ATTN_NORM);
+	sound(victima, CHAN_VOICE, "player/gib.wav", 1, ATTN_NORM);
+}
+
+// Un pedazo se va a los cuatro segundos. Los enemigos kbudget tienen thought, y
+// los nuestros igual.
+void() direkt_gib_quita = { remove(self); };
+
+// El fantasma se dibuja con un par de sprites de explosion, que son translucidos
+// de por si. La alternativa era poner el modelo del jugador a media
+// transparencia, pero el campo alpha no existe en el lado de QuakeC: es una
+// extension del motor que no se puede tocar desde el juego, y anadirla obliga a
+// cambiar la tabla de campos que comparten los dos motores. Con sprites se ve
+// translucido de verdad y sin tocar nada del motor.
+float direkt_fantasma_fase;
+
+void() direkt_fantasma =
+{
+	local entity s;
+
+	if (!self.deadflag)
+		return;
+
+	s = spawn();
+	s.classname = "direkt_fantasma_sprite";
+	s.solid = SOLID_NOT;
+	s.movetype = MOVETYPE_NONE;
+	s.model = "progs/s_explod.spr";
+	setmodel(s, s.model);
+
+	// s_explod.spr tiene seis cuadros (lo dice tools/sprinfo.py). Se van
+	// alternando para que la nube se mueva sola, y se vuelve a cero al llegar
+	// al ultimo: en QuakeC no hay modulo.
+	direkt_fantasma_fase = direkt_fantasma_fase + 1;
+	if (direkt_fantasma_fase > 5)
+		direkt_fantasma_fase = 0;
+	s.frame = direkt_fantasma_fase;
+	s.origin = self.origin;
+	s.origin_z = self.origin_z + 12;
+	s.angles = self.angles;
+	s.effects = EF_BRIGHTFIELD;
+
+	s.think = direkt_fantasma_muere;
+	s.nextthink = time + 0.12;
+}
+
+void() direkt_fantasma_muere = { remove(self); };
+
+// La muerte del jugador.
+void(entity victima) direkt_muerte_jugador =
+{
+	if (victima.deadflag)
+		return;
+
+	if (direkt_test_muerte_armado)
+	{
+		localcmd(" echo DIREKT: un golpe mata al jugador\n");
+		direkt_test_muerte_armado = 0;
+	}
+
+	// Los pedazos salen antes de tocar nada del jugador, que si no se los lleva
+	// el cambio de estado de despues.
+	direkt_gibs(victima);
+
+	victima.deadflag = DEAD_DYING;
+	victima.takedamage = DAMAGE_NO;
+	victima.frame = 0;
+
+	// El cuerpo y el arma se apagan. El modelo es lo primero que ve el jugador
+	// al morir, asi que tiene que desaparecer antes que nada.
+	victima.model = "";
+	victima.weaponmodel = "";
+	victima.weaponframe = 0;
+
+	// La vida se queda en uno a proposito: el motor no mueve a quien tiene la
+	// vida a cero. Lo que dice que esta muerto es deadflag.
+	victima.health = 1;
+	victima.max_health = DIREKT_MAX_HEALTH;
+	victima.armorvalue = 0;
+	victima.items = 0;
+	victima.currentammo = 0;
+
+	// El fantasma vuela sin gravedad y sigue chocando con el mundo. Nada de
+	// noclip: solid se queda en SLIDEBOX y es SV_FlyMove el que lo mueve.
+	victima.movetype = MOVETYPE_FLY;
+	victima.gravity = 0;
+	victima.solid = SOLID_SLIDEBOX;
+	victima.velocity = VEC_ORIGIN;
+	victima.flags = 0;
+
+	// El aviso de abajo y el ENTER para reintentar. El texto lo dibuja el motor
+	// (cvar scr_msgline, parche nuestro); desde aqui solo se le avisa.
+	//
+	// El cvar se asigna a pelo, sin "set" delante, porque "set" no existe en
+	// Ironwail: responde "Unknown command set" y no hace nada. Escribir
+	// "scr_msgline valor" a pelo es la forma que los dos motores entienden, y es
+	// la de siempre en Quake.
+	stuffcmd(victima, "scr_msgline \"moriste\\npulsa Enter para reintentar\"");
+	stuffcmd(victima, "bind KP_ENTER \"impulse 26\"");
+	stuffcmd(victima, "bind RETURN \"impulse 26\"");
+
+	// El fantasma, y a los tres segundos, otra vez al principio.
+	victima.think = direkt_fantasma;
+	victima.nextthink = time + 0.05;
+	direkt_tiempo_muerte = time + 3;
+	localcmd(" echo DIREKT: el jugador muere");
+}
+
+// El aviso de "moriste" se queda puesto hasta que se pulse Enter.
+void() direkt_jugador_cae =
 {
 	if (self.deadflag)
 		return;
+}
 
-	self.deadflag = DEAD_DYING;
-	self.takedamage = DAMAGE_NO;
-	self.health = 0;
-	direkt_tiempo_muerte = time + 3;
-	localcmd(" echo DIREKT: el jugador muere");
-
-	// Se sueltan las reliquias al morir.
-	self.items = self.items
-		- (self.items & (IT_INVISIBILITY | IT_INVULNERABILITY | IT_SUIT | IT_QUAD));
-
-	// El cuerpo cae un poco y luego se queda en el suelo.
-	self.movetype = MOVETYPE_TOSS;
-	self.solid = SOLID_SLIDEBOX;
-	self.velocity_x = 0;
-	self.velocity_y = 0;
-	self.velocity_z = 100;
-	self.weaponmodel = "";
-	self.weaponframe = 0;
-	self.frame = 0;
-	sound(self, CHAN_VOICE, "player/udeath.wav", 1, ATTN_NORM);
-
-	self.think = direkt_jugador_cae;
-	self.nextthink = time + 0.5;
-};
-
-void() direkt_jugador_cae =
+// Reintentar: lo mismo que reaparecer, pero porque el jugador ha pedido.
+void() direkt_jugador_reintentar =
 {
-	self.deadflag = DEAD_DEAD;
-	self.movetype = MOVETYPE_NONE;
-	self.velocity = '0 0 0';
+	if (!self.deadflag)
+		return;
 
-	// A los tres segundos vuelve a aparecer. En muerte suelta es lo normal.
-	self.think = direkt_jugador_reaparece;
-	self.nextthink = time + 3;
-};
-
-void() direkt_jugador_reaparece =
-{
+	stuffcmd(self, "scr_msgline \"\"");
+	self.think = direkt_nada;
+	self.nextthink = 0;
 	PutClientInServer();
+}
+
+// La prueba del golpe mortal.
+//
+// Va en un proyectil y no en el jugador por dos razones:
+//
+//   * direkt_danio rechaza que una entidad se hiera a si misma, asi que desde el
+//     propio jugador el golpe se saldria antes de tocar la vida y la prueba no
+//     mediria nada. Con un proyectil se recorre el camino de verdad, el mismo que
+//     usan las armas y las trampas.
+//   * La comprobacion se hace en el MISMO frame que el golpe, dentro del
+//     proyectil. Si se mirara despues, al jugador muerto lo habria cambiado la
+//     animacion de caida, que pisa el think.
+//
+// Que un golpe mate es una de las cosas que mas se tocan, asi que tiene su
+// linea en el log y su comprobacion en el banco de pruebas.
+void() direkt_test_muerte_pelea =
+{
+	direkt_test_muerte_armado = 1;
+	direkt_danio(direkt_test_muerte_jugador, self, 15);
+	remove(self);
+};
+
+// Paso 1: que el punto de partida sea el del juego. Una vida, sin armadura y sin
+// reliquia que esquive el dano. Si algo de esto se cumpliera, el jugador seria
+// inmortal y de nada serviria mirar como se aplica el golpe.
+void() direkt_test_muerte =
+{
+	direkt_test_muerte_armado = 0;
+
+	if (self.max_health != DIREKT_MAX_HEALTH)
+		localcmd(" echo DIREKT: el jugador no nace con una vida\n");
+	if (self.armorvalue > 0)
+		localcmd(" echo DIREKT: el jugador nace con armadura\n");
+	if (self.items & IT_INVULNERABILITY)
+		localcmd(" echo DIREKT: el jugador nace invulnerable\n");
+
+	direkt_test_muerte_jugador = self;
+	direkt_test_muerte_arma = spawn();
+	direkt_test_muerte_arma.classname = "direkt_test_punio";
+	direkt_test_muerte_arma.solid = SOLID_NOT;
+	direkt_test_muerte_arma.movetype = MOVETYPE_NONE;
+
+	// spawn() deja la entidad en el origen de coordenadas, y en un mapa eso
+	// cae fuera del mundo. El motor solo mete en su lista de think las entidades
+	// que estan dentro, con lo que sin esto el proyectil se queda sin ejecutar
+	// y la prueba no dice nada. Se pone donde esta el jugador, que si que esta.
+	setorigin(direkt_test_muerte_arma, self.origin);
+	direkt_test_muerte_arma.think = direkt_test_muerte_pelea;
+	direkt_test_muerte_arma.nextthink = time + 0.05;
 };
 
 // ================================================================= selftest

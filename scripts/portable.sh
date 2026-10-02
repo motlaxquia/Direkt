@@ -537,7 +537,7 @@ lanzar() {
 	set +e
 	${STDBUF[@]+"${STDBUF[@]}"} "$ejec" \
 		-basedir "$AQUI/datos" -basedir "$AQUI" -game direkt \
-		+set scr_drawsb 0 "$@" 2>&1 | tee "$log"
+		+set scr_drawsb 0 +bind SHIFT +speed "$@" 2>&1 | tee "$log"
 	rc="${PIPESTATUS[0]}"
 	set -e
 
@@ -648,7 +648,7 @@ comprobar() {
 	fi
 
 	${STDBUF[@]+"${STDBUF[@]}"} "${lanzo[@]}" -basedir "$AQUI/datos" -basedir "$AQUI" -game direkt \
-		+set scr_drawsb 0 \
+		+set scr_drawsb 0 +bind SHIFT +speed \
 		-nosound -window -width 640 -height 480 +map lqdm1 >"$log" 2>&1 &
 	pid=$!
 

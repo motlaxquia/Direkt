@@ -38,6 +38,12 @@ void() direkt_precache_assets =
 	direkt_precache("progs/gib3.mdl");
 	direkt_precache("progs/zom_gib.mdl");
 
+	// --- sonidos de muerte ---
+	// gib.wav es el de los pedazos. Sin precargarlo el motor avisa por consola
+	// y lo deja sin sonido.
+	precache_sound("player/udeath.wav");
+	precache_sound("player/gib.wav");
+
 	// --- sprites (VERA sin paleta, 1 byte por pixel) ---
 	// Los tres que trae el pak. s_bubble y s_light no los usa el juego de
 	// LibreQuake, pero son los sprites clasicos de burbuja, luz y explosion.
