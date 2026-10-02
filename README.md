@@ -33,7 +33,7 @@ cd direkt-portable-linux
 SHA-256 del paquete:
 
 ```
-0d9fa9a4f5fb778fe463866b2dab7e1d5540db4a1c8f4786d394433ac2fe53ad  direkt-portable-linux.tar.gz
+3531959d65a632ea473c99fad98b8f4b52b87be63a4d75fb53860c120269896c  direkt-portable-linux.tar.gz
 0fb4ea0965f2c24eb69dbe34f039c0db2e653aa52700ec3a52d52d20229d1b1b  direkt-portable-macos.tar.gz
 3d72816d3dbfde1f047ee279958c041a5e202547a93fec9c0aa31da0a5b6e12e  direkt-portable-windows.zip
 ```
@@ -45,11 +45,26 @@ forzar en los dos sentidos:
 
 El motor se elige solo según lo que anuncie la máquina, y se puede forzar:
 
+Para dejarlo fijo, sin variables de entorno, hay un comando. Se escribe en
+`direkt.conf`, dentro del paquete, y manda sobre la detección:
+
+```sh
+./direkt.sh motor                  # ver cuál se está usando
+./direkt.sh motor quakespasm       # usar siempre el ligero
+./direkt.sh motor ironwail         # usar siempre el principal
+./direkt.sh motor auto             # volver a decidir solo
+```
+
+Para una sola partida, la variable de entorno, que va por delante del fichero:
+
 ```sh
 DIREKT_SOFTWARE_GL=1 ./direkt.sh      # ir siempre por software
-DIREKT_MOTOR=ironwail ./direkt.sh     # forzar el motor principal (OpenGL 4.3)
-DIREKT_MOTOR=quakespasm ./direkt.sh   # forzar el motor ligero (OpenGL 1.5)
+DIREKT_MOTOR=ironwail ./direkt.sh     # el motor principal (OpenGL 4.3)
+DIREKT_MOTOR=quakespasm ./direkt.sh   # el motor ligero (OpenGL 1.5)
 ```
+
+Si un motor peta al arrancar con un error de OpenGL o de shaders, prueba con el
+otro: es el mismo juego con otro dibujado.
 
 ### Equipos sin OpenGL 4.3
 

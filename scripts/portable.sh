@@ -178,6 +178,15 @@ que esté garantizado.
    salidas son: usar la version de Linux bajo un entorno grafico virtualizado,
    o esperar a que el motor tenga un backend que no dependa de OpenGL.
 
+### Si un motor falla
+
+Si al arrancar salta un error de OpenGL o de shaders, prueba con el otro:
+
+    ./direkt.sh motor quakespasm
+
+Es el mismo juego, los mismos mapas y el mismo codigo: lo unico que cambia es
+el dibujado. Quakespasm es mucho menos exigente con la tarjeta.
+
 ### Lo que si funciona en macOS
 
 El generador de `.bsp` (`direkt-bsp`) y el editor (`direkt-edit`) no dependen
@@ -229,6 +238,15 @@ Si el paquete se usa en una maquina virtual, o con drivers viejos, conviene
 tener instalado el rasterizador:
 
     sudo apt install libgl1-mesa-dri libglx-mesa0
+
+### Si un motor falla
+
+Si al arrancar salta un error de OpenGL o de shaders, prueba con el otro:
+
+    ./direkt.sh motor quakespasm
+
+Es el mismo juego, los mismos mapas y el mismo codigo: lo unico que cambia es
+el dibujado. Quakespasm es mucho menos exigente con la tarjeta.
 
 ### Forzar uno u otro
 
@@ -336,6 +354,50 @@ gl_insuficiente() {
 	return 1
 }
 
+# Que motor hay elegido.
+#
+# El orden es: la variable de entorno manda sobre todo, luego el fichero de
+# configuracion del paquete, luego la deteccion automatica. El fichero existe
+# porque pedir que se ponga una variable de entorno antes de cada partida no es
+# una manera de hacer las cosas, y el comando "direkt.sh motor <nombre>" deja la
+# eleccion escrita.
+CONF="$AQUI/direkt.conf"
+
+motor_configurado() {
+	local v=""
+	if [ -f "$CONF" ]; then
+		v="$(sed -n 's/^[[:space:]]*motor[[:space:]]*=[[:space:]]*\([a-z]*\).*/\1/p' "$CONF" | head -1)"
+	fi
+	case "$v" in
+	ironwail|quakespasm) printf '%s' "$v" ;;
+	*) printf 'auto' ;;
+	esac
+}
+
+motor_poner() {
+	case "$1" in
+	ironwail|quakespasm|auto) ;;
+	*)
+		echo "  motores posibles: ironwail, quakespasm, auto" >&2
+		return 1
+		;;
+	esac
+	local actual
+	actual="$(motor_configurado)"
+	if [ "$actual" = "$1" ]; then
+		echo "  ya esta en $1"
+		return 0
+	fi
+	# Se reescribe solo la linea del motor y se deja el resto, que puede haber
+	# puesto la gente a mano.
+	if [ -f "$CONF" ]; then
+		sed -i.bak "s/^[[:space:]]*motor[[:space:]]*=.*/motor = $1/" "$CONF" && rm -f "$CONF.bak"
+	else
+		printf 'motor = %s\n' "$1" >"$CONF"
+	fi
+	echo "  motor = $1  (quedado en $CONF)"
+}
+
 jugar() {
 	local v motor=""
 	local iron="$AQUI/bin/ironwail"; [ -x "$iron" ] || iron="$AQUI/bin/ironwail.exe"
@@ -355,9 +417,10 @@ jugar() {
 	#
 	# O sea: donde no llega la GPU, mejor motor por software que mejor motor
 	# por hardware.
-	if [ "${DIREKT_MOTOR:-auto}" = "ironwail" ]; then
+	local elegido="${DIREKT_MOTOR:-$(motor_configurado)}"
+	if [ "$elegido" = "ironwail" ]; then
 		motor="ironwail"
-	elif [ "${DIREKT_MOTOR:-auto}" = "quakespasm" ]; then
+	elif [ "$elegido" = "quakespasm" ]; then
 		motor="quakespasm"
 	elif gl_insuficiente; then
 		v="$(version_gl)"
@@ -449,7 +512,7 @@ comprobar() {
 	# ligero, se cae al rasterizador por software.
 	local qs="$AQUI/bin/quakespasm"
 	[ -x "$qs" ] || qs="$AQUI/bin/quakespasm.exe"
-	if [ "${DIREKT_MOTOR:-auto}" != "ironwail" ] && gl_insuficiente && [ -x "$qs" ]; then
+	if [ "${DIREKT_MOTOR:-$(motor_configurado)}" != "ironwail" ] && gl_insuficiente && [ -x "$qs" ]; then
 		lanzo=("$qs")
 		echo "  OpenGL insuficiente: se prueba con el motor ligero"
 	elif [ "${DIREKT_SOFTWARE_GL:-0}" = 1 ] || gl_insuficiente; then
@@ -502,6 +565,12 @@ comprobar() {
 
 case "${1:-jugar}" in
 jugar)   jugar ;;
+motor)
+	case "${2:-}" in
+	"")      echo "  motor elegido: $(motor_configurado)  (auto, ironwail o quakespasm)" ;;
+	*)       motor_poner "$2" ;;
+	esac
+	;;
 test)    comprobar ;;
 editor)  exec "$AQUI/bin/direkt-edit$EDIT_EXT" "${2:-}" ;;
 bsp)     exec "$AQUI/bin/direkt-bsp$EDIT_EXT" "$2" "$3" ;;
@@ -613,9 +682,11 @@ macos)
 	echo "Si es asi, desde una terminal dentro de la carpeta:"
 	echo "    xattr -dr com.apple.quarantine ."
 	echo
-	echo "Y el motor pide OpenGL 4.3, que es mas de lo que ofrece el OpenGL de"
-	echo "macOS. En un Mac con una GPU de Apple puede que no llegue; en ese caso"
-	echo "este paquete no es la mejor opcion. Ver LEE-ME-ENTORNO.md."
+	echo "En macOS el motor principal no arranca: el OpenGL del sistema se queda"
+	echo "en 4.1 y el necesita 4.3. El lanzador usa solo el motor ligero. Si"
+	echo "quieres el otro, se cambia asi:"
+	echo "    ./direkt.sh motor ironwail"
+	echo "Ver LEE-ME-ENTORNO.md."
 	;;
 *)
 	echo "Para usarlo:"
