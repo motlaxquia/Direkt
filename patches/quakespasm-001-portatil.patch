@@ -111,3 +111,25 @@
  	{
  		int err = SOCKETERRNO;
  		Sys_Error ("UDP: ioctlsocket (FIONREAD) failed (%s)", socketerror(err));
+--- orig/Quake/wsaerror.h	2026-08-11 20:10:10.000000000 +0000
++++ new/Quake/wsaerror.h	2026-10-02 00:17:42.492211741 +0000
+@@ -6,6 +6,14 @@
+  * http://www.sockets.com/err_lst1.htm
+  */
+ 
++/* Este fichero define una funcion static y no tenia guarda de inclusion, asi que
++ * dos veces en la misma unidad de compilacion daba "redefinition of
++ * __WSAE_StrError". Se incluye desde net_sys.h, que a su vez lo incluyen varios
++ * .c, asi que es justo el caso que se daba. */
++#ifndef WSAERROR_H
++#define WSAERROR_H
++
++
+ #ifndef __wsaerr_static
+ #define __wsaerr_static static
+ #endif	/* static */
+@@ -89,3 +97,4 @@
+ 	}
+ }
+ 
++#endif /* WSAERROR_H */
