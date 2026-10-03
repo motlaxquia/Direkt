@@ -73,9 +73,9 @@ static void bprintf(lvlbuf_t *b, const char *fmt, const char *a)
 
 /* Comparar sin distinguir mayusculas, pero sin strcasecmp: eso no es de C, y en
  * MSVC no esta. Se hace a mano para que el mismo codigo compile en los tres. */
-static int igual_ci(const char *a, const char *b)
+static int igual_ci(const char *a, const char *b, size_t n)
 {
-    while (*a && *b) {
+    while (n-- > 0) {
         int ca = (*a >= 'A' && *a <= 'Z') ? *a + 32 : *a;
         int cb = (*b >= 'A' && *b <= 'Z') ? *b + 32 : *b;
         if (ca != cb)
@@ -83,7 +83,7 @@ static int igual_ci(const char *a, const char *b)
         a++;
         b++;
     }
-    return *a == *b;
+    return 1;
 }
 
 /* xstrndup no es de C ni de POSIX de forma fiable. */
@@ -195,10 +195,17 @@ int ed_lvl_write(ed_doc_t *doc, const char *filename, ed_lvl_meta_t *meta)
 static int partir(const char *texto, ed_lvl_meta_t *meta, char **mapa)
 {
     const char *p = texto;
+    const char *inicio_mapa = NULL;
     int pasada_cabecera = 0;
 
     memset(meta, 0, sizeof(*meta));
     meta->n_extra = 0;
+
+    /* La linea "// direkt-level v1" es la firma del formato. Se comprueba aqui
+     * para poder decir "esto no es un .drklvl" en vez de devolver un mapa vacio
+     * sin explicacion, que es lo que pasaba. */
+    if (strncmp(texto, DIREKT_LVL_MAGIC, strlen(DIREKT_LVL_MAGIC)) != 0)
+        return 1;
 
     while (*p) {
         const char *fin = strchr(p, '\n');
@@ -209,6 +216,10 @@ static int partir(const char *texto, ed_lvl_meta_t *meta, char **mapa)
 
         if (!pasada_cabecera && strncmp(t, "// --- MAP ---", 13) == 0) {
             pasada_cabecera = 1;
+            /* Aqui se apunta donde empieza el mapa. Sin guardarlo, p sigue
+             * avanzando hasta el final del fichero y al terminar *mapa salia
+             * vacio: era un cursor, no una posicion fija. */
+            inicio_mapa = fin ? fin + 1 : p + len;
             free(linea);
             p = fin ? fin + 1 : p + len;
             continue;
@@ -218,7 +229,7 @@ static int partir(const char *texto, ed_lvl_meta_t *meta, char **mapa)
             for (i = 0; claves[i]; i++) {
                 size_t kl = strlen(claves[i]);
                 if (strncmp(t, "// ", 3) == 0 &&
-                    igual_ci(t + 3, claves[i]) &&
+                    igual_ci(t + 3, claves[i], kl) &&
                     t[3 + kl] == ':') {
                     char **campo = NULL;
                     if (strcmp(claves[i], "nombre") == 0) campo = &meta->nombre;
@@ -231,7 +242,13 @@ static int partir(const char *texto, ed_lvl_meta_t *meta, char **mapa)
                     break;
                 }
             }
-            if (!conocida && meta->n_extra < ED_LVL_EXTRA_MAX)
+            /* La firma del formato se reconoce arriba y no se guarda: no es un
+             * comentario del nivel, es el formato. Y la barra "//" a secas es el
+             * separador de la cabecera, tampoco es un comentario propio. */
+            if (strncmp(t, DIREKT_LVL_MAGIC, strlen(DIREKT_LVL_MAGIC)) == 0 ||
+                strcmp(t, "//") == 0)
+                conocida = 1;
+            if (!conocida && t[0] && meta->n_extra < ED_LVL_EXTRA_MAX)
                 meta->extra[meta->n_extra++] = xstrdup(t);
         }
 
@@ -245,7 +262,9 @@ static int partir(const char *texto, ed_lvl_meta_t *meta, char **mapa)
         return 1;
     }
 
-    *mapa = xstrdup(p);
+    *mapa = xstrdup(inicio_mapa ? inicio_mapa : p);
+    /* Si el fichero se escribio mal, esto es lo que se va a leer y va a fallar
+     * mucho mas abajo con un error que no dice nada. Mejor decirlo aqui. */
     return 0;
 }
 

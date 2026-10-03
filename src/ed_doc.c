@@ -228,8 +228,14 @@ int save_map(const char *filename, map_t *map)
 
 int ed_doc_save(ed_doc_t *doc, const char *filename)
 {
-	if (save_map(filename, doc->map) != 0)
+	/* Un .drklvl se guarda con su cabecera y el .map dentro; cualquier otra
+	 * extension es un .map a pelo, que es como se guardaba antes. */
+	if (ed_lvl_es_drklvl(filename)) {
+		if (ed_lvl_write(doc, filename, &doc->meta) != 0)
+			return 1;
+	} else if (save_map(filename, doc->map) != 0) {
 		return 1;
+	}
 	free(doc->filename);
 	doc->filename = xstrdup(filename);
 	{
@@ -609,7 +615,18 @@ ed_doc_t *ed_doc_load(const char *filename)
 	ed_doc_t *doc = xcalloc(1, sizeof(ed_doc_t));
 	const char *slash;
 
-	doc->map = parse_map(filename);
+	/* Si es un .drklvl se saca el .map de dentro antes de interpretarlo. */
+	if (ed_lvl_es_drklvl(filename)) {
+		char *mapa = NULL;
+		if (ed_lvl_read(filename, &doc->meta, &mapa) == 0) {
+			doc->map = parse_map_text(mapa);
+			free(mapa);
+		} else {
+			error("no se pudo leer el .drklvl %s", filename);
+		}
+	} else {
+		doc->map = parse_map(filename);
+	}
 	doc->filename = xstrdup(filename);
 	slash = strrchr(filename, '/');
 	doc->title = xstrdup(slash ? slash + 1 : filename);
@@ -624,6 +641,7 @@ ed_doc_t *ed_doc_load(const char *filename)
 
 void ed_doc_free(ed_doc_t *doc)
 {
+	ed_lvl_meta_free(&doc->meta);
 	if (!doc)
 		return;
 	free_map(doc->map);

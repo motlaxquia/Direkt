@@ -166,6 +166,95 @@ static void test_roundtrip(const char *origen)
 	ed_doc_free(b);
 }
 
+/* ------------------------------------------------------- prueba 1b: .drklvl
+ *
+ * El modulo de ed_lvl se prueba SOLO, sin pasar por ed_doc. Asi se sabe si el
+ * problema esta en el formato o en como se engancha al documento, que es la
+ * duda que sezego al conectar la primera vez.
+ */
+static void test_drklvl(const char *origen)
+{
+	ed_doc_t *a, *b;
+	ed_lvl_meta_t meta;
+	map_t *mapa;
+	char tmp[TMP_PATH_MAX];
+	char lvl[TMP_PATH_MAX];
+	char *texto = NULL;
+	int na, nb;
+
+	printf("\n\033[1m1b. El formato .drklvl, por separado\033[0m\n");
+
+	a = ed_doc_load(origen);
+	na = ed_num_brushes(a);
+
+	/* temp_file siempre acaba en .tmp, y el editor decide por la extension. Se
+	 * renombra a .drklvl para recorrer el camino de verdad. */
+	if (!temp_file(tmp, sizeof tmp, "lvl"))
+		error("no se puede crear el temporal del .drklvl");
+	snprintf(lvl, sizeof lvl, "%.*s.drklvl", (int)(strlen(tmp) - 4), tmp);
+	remove(lvl);
+	if (rename(tmp, lvl) != 0)
+		error("no se pudo renombrar el temporal a .drklvl");
+
+	memset(&a->meta, 0, sizeof(a->meta));
+	a->meta.nombre = xstrdup("La habitacion");
+	a->meta.autor = xstrdup("prueba");
+	a->meta.descripcion = xstrdup("una caja y una luz");
+	a->meta.extra[0] = xstrdup("un comentario que no es clave");
+	a->meta.n_extra = 1;
+
+	check(ed_lvl_write(a, lvl, &a->meta) == 0, "se escribe el .drklvl (%s)", lvl);
+
+	check(ed_lvl_es_drklvl(lvl), "la extension se reconoce como .drklvl");
+	ed_doc_free(a);
+
+	/* Y el camino de verdad: abrirlo con ed_doc_load, que es por donde entra
+	 * un nivel de verdad. El modulo solo ya esta comprobado arriba; esto
+	 * comprueba que el enganche al documento tambien. */
+	a = ed_doc_load(lvl);
+	check(ed_num_brushes(a) == na, "abrir un .drklvl da el mapa entero (%d)",
+	      ed_num_brushes(a));
+	check(a->meta.nombre && strcmp(a->meta.nombre, "La habitacion") == 0,
+	      "el documento se queda con el nombre del nivel");
+	check(ed_doc_save(a, lvl) == 0, "se vuelve a guardar el .drklvl abierto");
+	check(ed_lvl_read(lvl, &meta, &texto) == 0, "se relee tras guardar");
+	check(texto && strstr(texto, "worldspawn") != NULL,
+	      "el mapa sigue dentro despues de dos guardados");
+	free(texto);
+	texto = NULL;
+	ed_lvl_meta_free(&meta);
+	check(ed_lvl_es_drklvl(NULL) == 0, "un nombre NULL no revienta al preguntar");
+
+	check(ed_lvl_read(lvl, &meta, &texto) == 0, "se lee el .drklvl");
+	check(texto && texto[0] != 0, "el mapa de dentro no sale vacio");
+	check(meta.nombre && strcmp(meta.nombre, "La habitacion") == 0,
+	      "se lee el nombre de la cabecera");
+	check(meta.autor && strcmp(meta.autor, "prueba") == 0,
+	      "se lee el autor de la cabecera");
+	check(meta.descripcion && strcmp(meta.descripcion, "una caja y una luz") == 0,
+	      "se lee la descripcion de la cabecera");
+	check(meta.n_extra == 1 && meta.extra[0] &&
+	      strstr(meta.extra[0], "no es clave") != NULL,
+	      "se conserva el comentario que no es clave");
+
+	/* Y que el mapa de dentro se entienda: que si no, el formato seria un
+	 * fichero de texto decoration y no un nivel. */
+	b = ed_doc_new();
+	mapa = texto ? parse_map_text(texto) : NULL;
+	check(mapa != NULL, "el texto de dentro se interpreta como .map");
+	b->map = mapa;
+	nb = ed_num_brushes(b);
+	check(na == nb && na > 0, "los brushes se conservan (%d -> %d)", na, nb);
+
+	remove(lvl);
+	free(texto);
+	ed_lvl_meta_free(&meta);
+	ed_doc_free(a);
+	if (mapa)
+		free(mapa);
+	free(b);
+}
+
 /* ------------------------------------------------------------------ prueba 2 */
 
 static void test_box(void)
@@ -436,8 +525,13 @@ int ed_selftest(const char *mapa)
 	test_pick();
 	test_edit();
 	test_compile();
-	if (mapa)
+	/* Los dos necesitan un mapa de entrada. Sin el (el selftest sin argumentos)
+	 * se saltaban; y al no saltarselos, ed_doc_load(NULL) reventaba el proceso
+	 * entero y no se veia ni un PASA de lo que venia despues. */
+	if (mapa) {
 		test_roundtrip(mapa);
+		test_drklvl(mapa);
+	}
 
 	printf("\n\033[1mResultado\033[0m\n  %d pasan, %d fallan\n", ok, ko);
 	if (ko == 0)
