@@ -57,9 +57,25 @@ VERSION = 6
 FRAME_SINGLE = 0
 SKIN_SINGLE = 0
 
-# MF_ROTATE: el motor gira el modelo con su avelocity. Es lo que hace que la
-# cabeza deforme mientras vuela, que es lo que se quiere.
+# Los flags del .mdl.
+#
+# OJO CON ESTE 4. Son dos cosas DISTINTAS que casan en el mismo bit:
+#
+#   * En la cabecera del modelo, MF_ROTATE (4) le dice al motor que gire el
+#     modelo con su avelocity. Es lo que hace que la cabeza deforme al volar.
+#   * En la lista de modelos, EF_GIB (4) le dice al motor que ESA ENTIDAD
+#     suelta un rastro de SANGRE. Esta es en cl_main.c:
+#
+#         if (ent->model->flags & EF_GIB)
+#             CL_RocketTrail (ent, 2);      // 2 = sangre
+#
+#     El rastro sale SOLO, sin que el juego mande nada: el motor lo hace cada
+#     frame mientras la entidad se mueve.
+#
+# Por lo tanto, quitar el MF_ROTATE de la cabeza le quita la sangre sin que
+# ningun aviso. Se deja escrito en el sitio de los flags, no solo aqui.
 MF_ROTATE = 0x0004
+EF_GIB = 0x0004        # el mismo bit, otra cosa: el rastro de sangre
 
 FRAME_NAME_LEN = 16
 
@@ -283,7 +299,10 @@ def escribir_mdl(ruta: Path, malla: Malla, piel: bytes, ancho: int, alto: int,
     out += struct.pack("<i", len(malla.tris))
     out += struct.pack("<i", 1)            # numframes
     out += struct.pack("<i", 0)            # synctype = ST_SYNC
-    out += struct.pack("<i", MF_ROTATE)
+    # MF_ROTATE y EF_GIB son el mismo bit (4) en dos listas distintas. Con esto
+    # la cabeza gira Y suelta sangre.
+    flags = MF_ROTATE | EF_GIB
+    out += struct.pack("<i", flags)
     out += struct.pack("<f", 0.0)          # size, sin uso en alias v6
 
     # Piel.

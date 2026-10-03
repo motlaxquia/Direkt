@@ -129,6 +129,13 @@ entity	direkt_test_muerte_jugador;
 entity	direkt_test_muerte_arma;
 float	direkt_test_muerte_armado;
 
+// Cuantos pedazos y heads se han soltado en la ultima muerte. Los cuentan
+// direkt_gibs y direkt_cabeza, y los lee el manejador de muerte, que si es
+// codigo del cliente y por eso puede escribir en el log (desde un proyectil no:
+// ni dprint ni localcmd se ven de ahi).
+float	direkt_gibs_soltados;
+float	direkt_cabezas_soltadas;
+
 // Cursor para no volver a mirar el mismo objeto. Sin esto, find() siempre
 // devuelve el primer objeto de cada clase y la prueba se queda enganchada
 // en el mismo arma una y otra vez.
@@ -479,8 +486,11 @@ void(entity victima) direkt_gibs =
 	local float ang;
 
 	i = 0;
+	direkt_gibs_soltados = 0;
+	direkt_cabezas_soltadas = 0;
 	while (i < 7)
 	{
+		direkt_gibs_soltados = direkt_gibs_soltados + 1;
 		g = spawn();
 		g.classname = "direkt_gib";
 		g.solid = SOLID_NOT;
@@ -528,6 +538,7 @@ void(entity victima) direkt_cabeza =
 {
 	local entity c;
 
+	direkt_cabezas_soltadas = direkt_cabezas_soltadas + 1;
 	c = spawn();
 	c.classname = "direkt_cabeza";
 	c.solid = SOLID_NOT;
@@ -572,6 +583,13 @@ void(entity victima) direkt_muerte_jugador =
 	// se los lleva el cambio de estado de despues.
 	direkt_gibs(victima);
 	direkt_cabeza(victima);
+
+	// Que se haya soltado de verdad. La sangre no la pone el juego: sale sola,
+	// porque los modelos de pedazo y el nuestro llevan EF_GIB y el motor suelta
+	// el rastro por su cuenta (cl_main.c). Lo que si depende de nosotros es que
+	// las entidades existan y se muevan, y eso es lo que se comprueba.
+	if (direkt_gibs_soltados != 7 || direkt_cabezas_soltadas != 1)
+		localcmd(" echo DIREKT: la muerte no ha soltado 7 pedazos y 1 cabeza\n");
 
 	victima.deadflag = DEAD_DYING;
 	victima.takedamage = DAMAGE_NO;
