@@ -449,6 +449,10 @@ ul.lista li::before{
       <div>
         <dl class="datos">
           <dt>Version</dt><dd>v0.9.0</dd>
+          <!-- El numero de subida no se escribe aqui a mano: sale de la API de
+               GitHub, que es donde estan las subidas de verdad. Si no se puede
+               consultar, se queda en blanco y no se inventa un numero. -->
+          <dt>Subida</dt><dd id="subida">&mdash;</dd>
           <dt>Tamano</dt><dd>127 MiB el de cada sistema</dd>
           <dt>Motor</dt><dd>Ironwail 08d5781</dd>
           <dt>Datos</dt><dd>LibreQuake (pak0.pak + pak1.pak)</dd>
@@ -700,6 +704,33 @@ d9d9e414c1af913af03008ded0174473583c663f3b850906e8ce9d295f99176b  direkt-portabl
       'queda en 4.1. El paquete trae un segundo motor que si funciona ahi, y el ' +
       'lanzador lo elige solo. El generador de mapas y el editor tambien.';
   }
+})();
+</script>
+<script>
+// Numero de subida.
+//
+// No esta escrito en el HTML a proposito. Va a la API de GitHub y cuenta
+// cuantas hay, asi que la pagina no puede quedarse diciendo "9" cuando ya se haya
+// subido la diez, que es justo lo que pasa con un numero a mano.
+//
+// La API contesta con Access-Control-Allow-Origin, asi que se puede pedir desde
+// el navegador sin proxy. Y tiene limite de peticiones: si se pasa, o si no hay
+// red, el guion NO se rompe ni inventa nada. Se queda el guion.
+(function () {
+  var salida = document.getElementById("subida");
+  if (!salida || !window.fetch) return;
+
+  fetch("https://api.github.com/repos/motlaxquia/Direkt/releases?per_page=100",
+        { headers: { Accept: "application/vnd.github+json" } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (lista) {
+      // Sin respuesta o con error: el guion se queda como estaba.
+      if (!lista || !lista.length) return;
+      // Tope de 100 por peticion. Con nueve uploads no se nota; si algun dia se
+      // pasan, el numero se quedaria en 100 y habria que pedir la segunda pagina.
+      salida.textContent = "#" + lista.length;
+    })
+    .catch(function () { /* sin red: se queda el guion */ });
 })();
 </script>
 </body>
