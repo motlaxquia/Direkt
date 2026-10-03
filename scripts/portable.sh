@@ -52,6 +52,8 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="$REPO/build"
 BIN="$BUILD/bin"
 LQ="$BUILD/lq/full"
+# Nuestro basedir, el que va por delante. Lo genera "make assets".
+DATOS="$BUILD/datos"
 STAGE="$BUILD/portable"
 # La extension va con el formato. En Windows se guarda en .zip, que es lo que
 # el explorador de archivos abre con doble clic sin preguntar nada. Con un .zip
@@ -132,11 +134,22 @@ cp "$REPO/direkt/progs.dat" "$STAGE/direkt/"
 # --- datos ------------------------------------------------------------------
 # Sin_LINK ni nada: se copia el arbol tal cual para que las rutas internas del
 # pak sigan valiendo.
+# DATOS. Un solo basedir, con los paks renumerados por "make assets": pak0 es
+# NUESTRO y pak1/pak2 son los de LibreQuake. El motor recorre pak0, pak1, pak2
+# en orden, con lo que lo nuestro gana y LibreQuake queda de respaldo.
+#
+# No se usan dos -basedirs porque Quakespasm NO los soporta (solo lee el
+# primero), y el motor ligero es justo el que hace falta en equipos sin OpenGL
+# 4.3. Ver el comentario de assets en el Makefile.
 echo "    datos del juego"
+if [ ! -d "$DATOS/id1" ]; then
+  printf 'ERROR: no existe %s. Ejecuta "make assets" antes de empaquetar.\n' \
+    "$DATOS/id1" >&2
+  exit 1
+fi
 mkdir -p "$STAGE/datos"
-cp -a "$LQ/." "$STAGE/datos/"
+cp -a "$DATOS/." "$STAGE/datos/"
 
-# --- fuente -----------------------------------------------------------------
 echo "    codigo fuente"
 mkdir -p "$STAGE/fuente"
 for d in src game scripts tools docs patches ci; do

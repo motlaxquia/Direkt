@@ -1,0 +1,307 @@
+--- /dev/null
++++ b/DIREKT-ironwail.patch
+@@ Este parche lo genera scripts/gen-patches.sh. NO se edita a mano. @@
+#
+# Los cambios de Direkt al motor ironwail, todos juntos. Para que se vea lo que
+# hay dentro sin abrir el fichero:
+#
+#   CMakeLists.txt
+#   Quake/cvar.c
+#   Quake/cvar.h
+#   Quake/gl_screen.c
+#   Quake/main_sdl.c
+#   Quake/sbar.c
+#   Quake/sv_user.c
+#   Quake/view.c
+#
+# Son tres cosas, mas un cuarto punto:
+#
+#   1. La barra de estado se apaga con "+set scr_drawsb 0", y con ella se
+#      apaga el hueco que dejaba (sb_lines), para que la vista 3D ocupe la
+#      pantalla entera en vez de dejar una franja.
+#   2. El aviso de una linea de scr_msgline, que el juego pinta en el motor.
+#   3. Al morir, la camara se queda recta (cl_deadnoroll). El alabeo se
+#      desactiva con la vida a cero, y el juego es el que avisa, porque desde
+#      el cliente no se puede saber si el jugador esta muerto.
+#   4. Portabilidad (macOS, MSYS2, ficheros sueltos) que ya estaba antes.
+#
+# Y las trampas del formato de parche, que han costado un rato:
+#
+#   * La cabecera lleva prefijos a/ y b/. Sin ellos, "patch -p1" se come el
+#     directorio y no encuentra el fichero.
+#   * El parche se genera contra el ORIGINAL, no contra el arbol ya parcheado.
+#     Si no, el diff incluye los cambios del parche anterior dos veces.
+--- a/CMakeLists.txt	origen
++++ b/CMakeLists.txt	2026-10-03 15:39:32.000000000 +0000
+@@ -61,7 +61,39 @@
+ endif()
+ 
+ add_executable(ironwail ${IWAIL_SRC})
+-if (UNIX)
++if (APPLE)
++	# En macOS, y no antes, hay que enlazar los frameworks a mano. La rama de
++	# UNIX de abajo solo mete "m", y con eso el ejecutable se enlazaba en Intel
++	# porque el dylib de SDL2 arrastraba IOKit de rebote. En Apple Silicon (arm64)
++	# ya no lo hace, y el enlazado falla con
++	#   Undefined symbols for architecture arm64: "_IOMasterPort" ...
++	# o sea, funciones de IOKit que existen de sobra pero contra las que no se
++	# ha enlazado nada. Se piden explicitamente.
++	#
++	# IOKit     : la aceleracion del raton (in_sdl.c)
++	# Cocoa     : NSAutoreleasePool y demas en in_sdl.c
++	# CoreFoundation : CFSTR() y los tipos de IOKit
++	# OpenGL    : el motor dibuja con el OpenGL del sistema, que va como
++	#             framework, no como -lGL
++	target_link_libraries(ironwail PRIVATE
++		"-framework IOKit"
++		"-framework Cocoa"
++		"-framework CoreFoundation"
++		"-framework OpenGL"
++	)
++	target_link_options(ironwail PRIVATE
++		"-Wl,-rpath,@loader_path"
++		"-Wl,-rpath,/usr/local/lib"
++	)
++	# SDL_main.h en macOS renombra el main del programa a SDL_main, pensando que
++	# es SDL quien pone el main de verdad. Cuando el SDL2 es un dylib, como el
++	# de Homebrew, no hay nadie que lo ponga y el enlazado acaba con
++	#   Undefined symbols for architecture arm64: "_main"
++	# SDL_MAIN_HANDLED dice que el programa trae su propio main, que es lo que
++	# ya hacia falta en Windows (WinMain) pero aqui no estaba puesto.
++	target_compile_definitions(ironwail PRIVATE SDL_MAIN_HANDLED)
++	set(ENABLE_USERDIRS TRUE CACHE STRING "Enable user directories")
++elseif (UNIX)
+ 	target_link_libraries(ironwail PRIVATE m)
+ 	set(ENABLE_USERDIRS TRUE CACHE STRING "Enable user directories")
+ elseif (WIN32)
+--- a/Quake/cvar.c	origen
++++ b/Quake/cvar.c	2026-10-03 15:39:32.000000000 +0000
+@@ -272,6 +272,33 @@
+ ============
+ */
+ 
++// La barra de abajo (vida, armadura, municion, armas) se apaga con
++// "+set scr_drawsb 0". No habia manera: Sbar_Draw se llamaba siempre y no
++// miraba ningun cvar. Con un jugador de una sola vida esa franja ocupa la
++// pantalla entera para decir "1".
++//
++// Se registra AQUI y no en Sbar_Init porque los "+set" de la linea de comandos
++// y los "exec" de la configuracion corren antes de que Host_Init llegue ahi, y
++// un cvar registrado tarde no hay forma de cambiarlo desde fuera.
++//
++// Y POR QUE EL VALOR POR DEFECTO ES 0 Y NO 1: con la opcion de ponerlo a mano
++// no habia manera fiable de apagarla. El "+set scr_drawsb 0" de la linea de
++// comandos se ejecutaba sin quejarse y luego no surtaba efecto, y el localcmd
++// desde la logica de juego tampoco. En vez de pelearse con el orden de arranque
++// de los dos motores, el valor por defecto es directamente el que se quiere.
++// Sigue siendo un cvar de verdad: "+set scr_drawsb 1" lo vuelve a encender.
++cvar_t		scr_drawsb = {"scr_drawsb", "0", CVAR_ARCHIVE};
++
++// Aviso de una linea (o dos, separadas por \n) que se pinta abajo en pantalla.
++// Lo escribe el juego con "stuffcmd set scr_msgline ..." cuando el jugador
++// muere, y se borra cuando reaparece.
++cvar_t		scr_msgline = {"scr_msgline", "", CVAR_ARCHIVE};
++
++// Al morir, la camara se queda recta. Lo pone el juego con un stuffcmd de una
++// palabra, porque desde el cliente no se puede saber si el jugador esta muerto
++// (la vida vive en el QC del servidor). Ver V_CalcViewRoll.
++cvar_t		cl_deadnoroll = {"cl_deadnoroll", "0", 0};
++
+ void Cvar_Init (void)
+ {
+ 	Cmd_AddCommand ("cvarlist", Cvar_List_f);
+@@ -282,6 +309,10 @@
+ 	Cmd_AddCommand ("reset", Cvar_Reset_f);
+ 	Cmd_AddCommand ("resetall", Cvar_ResetAll_f);
+ 	Cmd_AddCommand ("resetcfg", Cvar_ResetCfg_f);
++
++	Cvar_RegisterVariable (&scr_drawsb);
++	Cvar_RegisterVariable (&scr_msgline);
++	Cvar_RegisterVariable (&cl_deadnoroll);
+ }
+ 
+ //==============================================================================
+--- a/Quake/cvar.h	origen
++++ b/Quake/cvar.h	2026-10-03 15:39:32.000000000 +0000
+@@ -41,6 +41,9 @@
+ init function before any console commands are executed:
+ 
+ Cvar_RegisterVariable (&host_framerate);
++extern cvar_t	scr_drawsb;
++extern cvar_t	scr_msgline;
++extern cvar_t	cl_deadnoroll;
+ 
+ 
+ C code usually just references a cvar in place:
+--- a/Quake/gl_screen.c	origen
++++ b/Quake/gl_screen.c	2026-10-03 15:39:32.000000000 +0000
+@@ -486,6 +486,8 @@
+ Internal use only
+ =================
+ */
++extern cvar_t	scr_drawsb;
++
+ static void SCR_CalcRefdef (void)
+ {
+ 	float		size, scale; //johnfitz -- scale
+@@ -519,7 +521,14 @@
+ 	scale = CLAMP (1.0f, scr_sbarscale.value, (float)glwidth / 320.0f);
+ 	scale *= (float) vid.height / vid.guiheight;
+ 
+-	if (size >= 120 || cl.intermission || scr_sbaralpha.value < 1 || hudstyle != HUD_CLASSIC || cl.qcvm.extfuncs.CSQC_DrawHud) //johnfitz -- scr_sbaralpha.value
++	// scr_drawsb a 0 apaga la barra. Tambien hay que quitarle el hueco al mundo,
++	// o no: sb_lines es lo que recorta r_refdef.vrect.height, y si la barra no se
++	// dibuja pero el hueco se sigue reservando, abajo queda una franja del color
++	// de fondo en vez de mundo. Con las dos cosas a la vez la vista se estira y
++	// ocupa la pantalla entera.
++	if (!scr_drawsb.value)
++		sb_lines = 0;
++	else if (size >= 120 || cl.intermission || scr_sbaralpha.value < 1 || hudstyle != HUD_CLASSIC || cl.qcvm.extfuncs.CSQC_DrawHud) //johnfitz -- scr_sbaralpha.value
+ 		sb_lines = 0;
+ 	else if (size >= 110)
+ 		sb_lines = 24 * scale;
+--- a/Quake/main_sdl.c	origen
++++ b/Quake/main_sdl.c	2026-10-03 15:39:32.000000000 +0000
+@@ -120,7 +120,16 @@
+ 
+ // On OS X we call SDL_main from the launcher, but SDL2 doesn't redefine main
+ // as SDL_main on OS X anymore, so we do it ourselves.
+-#if defined(__APPLE__)
++//
++// El "launcher" del que habla el comentario de arriba es el ejecutable que
++// lleva el paquete .app de Ironwail: ese binario es el que define main y llama
++// a SDL_main. Cuando se compila un ejecutario a secas, como hace este proyecto,
++// no hay nadie que defina main, y el enlazado acaba con
++//   Undefined symbols for architecture arm64: "_main"
++//
++// Por eso el renombrado solo se hace si de verdad hay launcher, que se indica
++// definiendo APPLE_BUNDLE_LAUNCHER. CMake no lo define en este repo.
++#if defined(__APPLE__) && defined(APPLE_BUNDLE_LAUNCHER)
+ #define main SDL_main
+ #endif
+ 
+--- a/Quake/sbar.c	origen
++++ b/Quake/sbar.c	2026-10-03 15:39:32.000000000 +0000
+@@ -1605,6 +1605,56 @@
+ Sbar_Draw
+ ===============
+ */
++extern cvar_t	scr_drawsb;
++
++// El aviso de abajo (scr_msgline): "moriste / pulsa Enter para reintentar".
++//
++// Hace falta en el motor porque QuakeC no tiene forma de escribir en pantalla.
++// Se pinta encima de la barra, que con scr_drawsb a 0 no dibuja nada, y con la
++// barra puesta se pinta justo encima de ella.
++//
++// Se registra en Cvar_Init y no en Sbar_Init por lo mismo que scr_drawsb: los
++// "+set" de la linea de comandos y los "exec" de la configuracion corren antes
++// de Host_Init.
++extern cvar_t	scr_msgline;
++
++void Sbar_DrawMsgline (void)
++{
++	int y;
++	const char *line;
++	int i;
++
++	if (!scr_msgline.string[0])
++		return;
++	// Con la consola abierta a pantalla completa taparia el aviso, asi que no se
++	// dibuja.
++	if (scr_con_current == vid.height)
++		return;
++
++	// El canvas se pone a NULL a proposito. Esta funcion se llama justo antes de
++	// que Sbar_Draw elija su propio canvas, y Draw_String dibuja en el que haya
++	// puesto: sin ponerlo, sale con la textura que hubiera de antes y no se ve
++	// nada.
++	GL_SetCanvas (CANVAS_DEFAULT);
++
++	y = glheight - 8;
++
++	// Con "\n" se parte en varias lineas, y se dibujan hacia arriba desde la
++	// ultima para que la de "moriste" quede arriba del todo.
++	line = scr_msgline.string;
++	for (i = 1; i < 32; i++)
++	{
++		if (!line[i])
++			break;
++		if (line[i] == '\n')
++			y -= 8;
++	}
++	if (i >= 32)
++		return;
++
++	Draw_String (8, y, scr_msgline.string);
++}
++
+ void Sbar_Draw (void)
+ {
+ 	qboolean invuln;
+@@ -1612,6 +1662,14 @@
+ 	float x, y, w, h; //johnfitz
+ 	qpic_t *pic;
+ 
++	// Ver el comentario de scr_drawsb en cvar.c. El extern va aqui porque
++	// sbar.c solo incluye quakedef.h y no llega a cvar.h.
++	if (!scr_drawsb.value)
++	{
++		Sbar_DrawMsgline ();
++		return;
++	}
++
+ 	if (scr_con_current == vid.height)
+ 		return;		// console is full screen
+ 
+--- a/Quake/sv_user.c	origen
++++ b/Quake/sv_user.c	2026-10-03 15:39:32.000000000 +0000
+@@ -404,7 +404,13 @@
+ 	angles = sv_player->v.angles;
+ 
+ 	VectorAdd (sv_player->v.v_angle, sv_player->v.punchangle, v_angle);
+-	angles[ROLL] = V_CalcRoll (sv_player->v.angles, sv_player->v.velocity)*4;
++	// El alabeo sale de la velocidad lateral, y por eso al morir se veia la
++	// pantalla ladeada: el cadaver cae con algo de lado y la vista se banking
++	// con el. Con la vida a cero el alabeo se queda a cero, y lo que se quiere
++	// al morir es justo que la camara se quede recta siguiendo la cabeza.
++	angles[ROLL] = sv_player->v.health <= 0
++		? 0
++		: V_CalcRoll (sv_player->v.angles, sv_player->v.velocity)*4;
+ 	if (!sv_player->v.fixangle)
+ 	{
+ 		angles[PITCH] = -v_angle[PITCH]/3;
+--- a/Quake/view.c	origen
++++ b/Quake/view.c	2026-10-03 15:39:32.000000000 +0000
+@@ -707,11 +707,30 @@
+ Roll is induced by movement and damage
+ ==============
+ */
++extern cvar_t	cl_deadnoroll;
++
+ void V_CalcViewRoll (void)
+ {
+ 	float		side;
+ 
+-	side = V_CalcRoll (cl_entities[cl.viewentity].angles, cl.velocity);
++	// Al morir el cadaver cae con algo de lado y la pantalla se ladeaba sola,
++	// que no es lo que se quiere: al morir la camara se queda recta, en su sitio,
++	// siguiendo la cabeza.
++	//
++	// Desde aqui NO se puede mirar la vida. entity_t es la entidad del cliente y
++	// no lleva health: la vida vive en el QC del servidor. Por eso lo decide el
++	// juego con un cvar, que es lo unico que cruza de un lado al otro:
++	//
++	//     stuffcmd (self, "cl_deadnoroll 1");
++	//
++	// Y "1" es una palabra suelta, sin espacios, que es lo unico que se puede
++	// pasar desde QuakeC (ver el aviso de scr_msgline en cvar.c).
++	//
++	// OJO: esto NO es el "sv_user.c" de mas abajo, que es el balanceo del MODELO.
++	// Este es el de la CAMARA, y solo este quita la pantalla ladeada.
++	side = cl_deadnoroll.value
++		? 0
++		: V_CalcRoll (cl_entities[cl.viewentity].angles, cl.velocity);
+ 	r_refdef.viewangles[ROLL] += side;
+ 
+ 	if (v_dmg_time > 0)

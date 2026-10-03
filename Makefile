@@ -216,6 +216,7 @@ test: engine game game-noshowcase bsp edit
 	@$(REPO)/scripts/bsp-test.sh $(BSP_TEST_ARGS)
 	@$(REPO)/scripts/editor-test.sh $(EDITOR_TEST_ARGS)
 	@$$(command -v python3 || command -v python) $(REPO)/tools/menu.py --probar
+	@$(REPO)/scripts/patches-test.sh
 
 # ------------------------------------------------ datos propios
 #
@@ -227,17 +228,39 @@ test: engine game game-noshowcase bsp edit
 # ficheros sueltos. El motor busca primero en el pak y luego en el directorio, y
 # con las dos cosas en el mismo basedir el pak gana; por eso lo que se quiere
 # pisar va como fichero suelto y lo demas se queda en LibreQuake.
+# ------------------------------------------------ datos propios
+#
+# UN SOLO basedir, con los paks renumerados. Y no es por gusto: Ironwail acepta
+# varios -basedir, pero Quakespasm NO (common.c solo coje el primero, y no tiene
+# ni com_numbasedirs). Con dos basedirs el motor ligero se quedaba sin nada de
+# LibreQuake y no encontraba ni el pop.lmp ni los mapas.
+#
+# Adentro si que manda el orden, porque el motor recorre pak0, pak1, pak2... en
+# orden. Asi que:
+#
+#   pak0.pak   NUESTRO   (la cabeza)      <- lo primero que se mira
+#   pak1.pak   LibreQuake pak0
+#   pak2.pak   LibreQuake pak1
+#
+# El pak0 NUESTRO tiene que existir siempre, porque el motor exige que el
+# basedir tenga id1/pak0.pak y aborta si no. Por eso se genera uno minimo aunque
+# no haya nada que meter: un pak de 12 bytes cumple.
 assets:
+	@rm -rf $(DATOS)
+	@mkdir -p $(DATOS)/id1
+	@cp -a $(LQDATOS)/. $(DATOS)/
+	# Renumerar los paks de LibreQuake para que el nuestro sea el pak0.
+	@mv $(DATOS)/id1/pak1.pak $(DATOS)/id1/pak2.pak
+	@mv $(DATOS)/id1/pak0.pak $(DATOS)/id1/pak1.pak
 	@$(PYTHON) $(REPO)/tools/mdlgen.py \
 		--paleta $(LQDATOS)/id1/pak0.pak \
-		--salida $(BUILD)/assets/progs/gibhead.mdl
-	@mkdir -p $(DATOS)/id1
-	@cp -a $(BUILD)/assets/. $(DATOS)/id1/
-	@if [ -d $(ASSETS) ]; then cp -a $(ASSETS)/. $(DATOS)/id1/ 2>/dev/null || true; fi
+		--salida $(DATOS)/id1/progs/gibhead.mdl
 	@$(PYTHON) $(REPO)/tools/mpak.py \
 		--salida $(DATOS)/id1/pak0.pak \
-		progs/gibhead.mdl:$(BUILD)/assets/progs/gibhead.mdl
-	@echo "    ok: $(DATOS)/id1"
+		progs/gibhead.mdl:$(DATOS)/id1/progs/gibhead.mdl
+	@if [ -d $(ASSETS) ]; then cp -a $(ASSETS)/. $(DATOS)/id1/ 2>/dev/null || true; fi
+	@$(PYTHON) $(REPO)/tools/mpak.py --listar $(DATOS)/id1/pak0.pak >/dev/null
+	@echo "    ok: $(DATOS)/id1 (pak0 nuestro, pak1 y pak2 de LibreQuake)"
 
 # ------------------------------------------------ motor de recursos bajos
 #
@@ -369,6 +392,11 @@ $(EDIT_BIN): $(EDIT_SRC) $(addprefix $(REPO)/src/,$(CORE_HDR) $(EDIT_HDR))
 		-o $@ $(EDIT_SRC) $(EDIT_LIBS)
 	@test -x $@ || { echo "ERROR: no se produjo $(EDIT_BIN)" >&2; exit 1; }
 	@echo "    ok"
+
+# El paquete tarda: descomprime 130 MB y arranca el motor. No entra en "test" a
+# proposito, para que la suite rapida siga siendo rapida.
+paquete-test: portable
+	@$(REPO)/scripts/paquete-test.sh
 
 # bsp-test compila un mapa de prueba, lo valida y comprueba la colision.
 bsp-test: $(BSP_BIN)

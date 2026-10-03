@@ -133,11 +133,12 @@ rm -f "$CFG_TMP"
 
 # Rutas relativas a proposito: argv[0] entra tambien en la linea de comandos que
 # el motor trunca, y las rutas absolutas de este repo se comen ~40 caracteres.
-# El primer -basedir es el nuestro: lo que hay en el gana a los paks de
-# LibreQuake, que van en el segundo. Ver el comentario de DATOS en el Makefile.
+# Un solo basedir de datos: pak0 es nuestro y pak1/pak2 son de LibreQuake. Los
+# tres se recorren en orden, asi que lo nuestro gana. NO se usan dos -basedirs
+# porque Quakespasm solo lee el primero. Ver el comentario de assets en el
+# Makefile.
 args=(
   -basedir build/datos
-  -basedir build/lq/full
   -basedir .
   -game "$GAMEDIR_NAME"
   -noaddons
