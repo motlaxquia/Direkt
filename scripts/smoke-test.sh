@@ -467,11 +467,14 @@ else
   # direkt_salta), asi que esta comprobacion es la que dice si el jugador se
   # levanta de verdad. Sin --golpes no serviria: "+jump" en una cfg se queda
   # pulsado desde antes de que entre el jugador y el motor se come el flanco.
-  # Se mide en direkt-test y no en el mapa grande: en un mapa con techos bajos el
-  # vuelo se corta y la altura sale otra cosa.
-  if "$REPO_ROOT/scripts/run-headless.sh" --map direkt-test --settle 5 --min-lit 0 \
+  # Se mide en la pista de parkour y no en el mapa grande ni en la caja de pruebas:
+  # la caja tiene el techo a 64 y el vuelo se corta contra el, y en un mapa con
+  # techos bajos la altura sale otra cosa. En la pista se salta a cielo abierto.
+  if "$BUILD/bin/direkt-bsp" "$REPO_ROOT/src/test/parkour.map" \
+       "$BUILD/datos/id1/maps/parkour.bsp" >"$BUILD/bsp-parkour.out" 2>&1 \
+     && "$REPO_ROOT/scripts/run-headless.sh" --map parkour --settle 5 --min-lit 0 \
        --golpes "space:4:0.6" >"$BUILD/parkour-salto.out" 2>&1; then
-    LOG="$LOGS/run-direkt-test.log"
+    LOG="$LOGS/run-parkour.log"
     _alto="$(grep -cE "el salto es (alto|gigante)" "$LOG" || true)"
     _corto="$(grep -cE "el salto es (corto|normal)" "$LOG" || true)"
 
@@ -484,6 +487,119 @@ else
   else
     ko "el motor no arranco saltando"
     tail -10 "$BUILD/parkour-salto.out" >&2
+  fi
+
+  # Las cuatro habilidades del aire, en la pista de parkour (src/test/parkour.map).
+  #
+  # La pista va en +X a proposito: el angulo de la camara lo manda el cliente, no el
+  # punto de aparicion del mapa, asi que al entrar el jugador mira a +X y la pista
+  # tiene que ir en esa direccion para que las pruebas vayan por donde deben.
+  #
+  # Cada habilidad con su propia puesta en escena, porque dependen de estar en
+  #_running_, en el _aire_, o con una pared al lado:
+  #
+  #   - bunny hop: Shift y espacio a la vez, corriendo por la pista larga.
+  #   - dash y planeo: correr hasta el hueco y caer mientras se mantiene Shift. El
+  #     dash sale en el aire; el planeo, mientras cae.
+  #   - carrera por la pared: correr pegado al muro (nace a 20 unidades) y saltar.
+  PARKOUR_LOG="$LOGS/run-parkour.log"
+
+  _parkour() {   # mapa, espera, y el resto de argumentos para run-headless
+    local _mapa="$1"; shift
+    local _esp="$1"; shift
+    "$REPO_ROOT/scripts/run-headless.sh" --map "$_mapa" --settle "$_esp" \
+      --min-lit 0 "$@"
+  }
+
+  # El mapa tiene que compilar y existir.
+  if "$BUILD/bin/direkt-bsp" "$REPO_ROOT/src/test/parkour.map" \
+       "$BUILD/datos/id1/maps/parkour.bsp" >"$BUILD/bsp-parkour.out" 2>&1; then
+    ok "la pista de parkour compila"
+  else
+    ko "la pista de parkour no compila"
+    tail -5 "$BUILD/bsp-parkour.out" >&2
+    PARKOUR_LOG=""
+  fi
+
+  if [[ -n "$PARKOUR_LOG" ]]; then
+    # 1. Bunny hop: correr con Shift y saltar, con el Shift mantenido y el espacio
+    # pulsandose cada 0,5 s.
+    #
+    # Se hace con dos comandos y no con un acorde Shift+espacio porque, con el
+    # acorde, el banco no siempre ve la tecla modificadora continua (ver lo que se
+    # cuenta mas abajo del deslizamiento) y entonces solo se engancha un salto. Con
+    # pulsaciones separadas se engancha la cadena entera, que es lo que hay que
+    # comprobar.
+    if _parkour parkour 8 --walk --golpes "space:8:0.5" \
+         --tecla "shift:5" --test-de 0.5 >"$BUILD/parkour-bhop.out" 2>&1; then
+      # Se cuentan las dos cosas que dicen que la velocidad se conserva:
+      #
+      #   - "encadenado normal/rapido": la velocidad con la que entra cada salto, que
+      #     es justo lo que el bunny hop devuelve al aterrizar.
+      #   - "bunny hop normal/rapido": del informe de movimiento, la maxima
+      #     horizontal alcanzada en el aire. Si el bunny hop perdiera la velocidad en
+      #     cada suelo, esta se quedaria por debajo de 300.
+      #
+      # Con el banco no siempre se ve la tecla modificadora continua (X11 y sus
+      # repeticiones, ya explicado mas abajo), asi que se acepta cualquiera de las
+      # dos: las dos necesitan que la velocidad se haya conservado.
+      _encadenado="$(grep -c "bunny hop encadenado normal\|bunny hop encadenado rapido" "$PARKOUR_LOG" || true)"
+      _maxima="$(grep -c "bunny hop normal\|bunny hop rapido" "$PARKOUR_LOG" || true)"
+      if ((_encadenado > 0)); then
+        ok "el bunny hop conserva la velocidad al encadenar ($_encadenado saltos)"
+      elif ((_maxima > 0)); then
+        ok "el bunny hop conserva la velocidad en el aire ($_maxima informes)"
+      else
+        ko "el bunny hop pierde la velocidad: ni al encadenar ni en el aire"
+        grep -oE "bunny hop[a-z ]*" "$PARKOUR_LOG" | sort | uniq -c >&2
+      fi
+    else
+      ko "el motor no arranco con Shift y espacio"
+      tail -10 "$BUILD/parkour-bhop.out" >&2
+    fi
+
+    # 2 y 3. Dash y planeo: caer por el hueco con Shift. El arranque del dash es al
+    # entrar en el aire, y el planeo mientras cae.
+    if _parkour parkour 9 --walk --tecla "shift:6" --test-de 2.4 \
+         >"$BUILD/parkour-dash.out" 2>&1; then
+      _dash="$(grep -c "DIREKT: dash" "$PARKOUR_LOG" || true)"
+      _planeo="$(grep -c "DIREKT: planeo frenando la caida" "$PARKOUR_LOG" || true)"
+
+      if ((_dash > 0)); then
+        ok "el dash se dispara en el aire ($_dash)"
+      else
+        ko "el dash no se dispara nunca"
+        tail -10 "$BUILD/parkour-dash.out" >&2
+      fi
+
+      # "frenando la caida" solo sale si el recorte trabajo de verdad: el jugador
+      # iba a caer a mas de 200 y el tope lo paro. Sin eso, el planeo estara
+      # puesto pero no frenaria nada.
+      if ((_planeo > 0)); then
+        ok "el planeo frena la caida de verdad ($_planeo avisos)"
+      else
+        ko "el planeo no frena la caida: no sale el aviso del recorte"
+        tail -10 "$BUILD/parkour-dash.out" >&2
+      fi
+    else
+      ko "el motor no arranco con Shift en el hueco"
+      tail -10 "$BUILD/parkour-dash.out" >&2
+    fi
+
+    # 4. Carrera por la pared: correr pegado al muro y saltar.
+    if _parkour parkour 8 --walk --golpes "space:6:0.5" \
+         --tecla "shift:5" --test-de 0.5 >"$BUILD/parkour-muro.out" 2>&1; then
+      _muro="$(grep -c "DIREKT: carrera por la pared" "$PARKOUR_LOG" || true)"
+      if ((_muro > 0)); then
+        ok "la carrera por la pared se engancha ($_muro)"
+      else
+        ko "la carrera por la pared no se engancha nunca"
+        tail -10 "$BUILD/parkour-muro.out" >&2
+      fi
+    else
+      ko "el motor no arranco con Shift junto al muro"
+      tail -10 "$BUILD/parkour-muro.out" >&2
+    fi
   fi
 
   # El deslizamiento: hay que ir rapido (por eso la espera antes de pulsar) y
@@ -662,7 +778,7 @@ fi
 # Los tres mapas de esta seccion se compilan dentro de build/datos para que el
 # motor los encuentre, y ahi se acabarian en el paquete portable. Se borran
 # despues de probarlos, que es lo que se lleva uno.
-for _m in "$MUSICA_MAP" "$MUSICA_NUMERO_MAP" "$MUSICA_FALTA_MAP"; do
+for _m in "$MUSICA_MAP" "$MUSICA_NUMERO_MAP" "$MUSICA_FALTA_MAP" parkour; do
   rm -f "$BUILD/datos/id1/maps/$_m.bsp"
 done
 

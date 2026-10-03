@@ -849,6 +849,7 @@ void() direkt_dash_arranca =
 #define DIREKT_PLANEO_CAIDA 200
 
 float	direkt_planeo_aviso;
+float	direkt_planeo_frenado;
 
 // Lo mas rapido que se ha caido con planeo puesto. Va al informe de movimiento: si
 // el recorte funciona, nunca pasa de 200, y eso es justo lo que se comprueba desde
@@ -871,9 +872,6 @@ void() direkt_planeo =
 	// siempre. Lo demas (dash, wall run) tienen su propia duracion.
 	self.gravity = DIREKT_GRAVITY_SCALE;
 
-	if (!direkt_pulsada_mod() || direkt_piso())
-		return;
-
 	// Solo mientras se cae. Subiendo no hay nada que frenar.
 	if (self.velocity_z >= 0)
 		return;
@@ -889,11 +887,18 @@ void() direkt_planeo =
 
 	if (self.velocity_z < -DIREKT_PLANEO_CAIDA)
 	{
-		// Aviso de que el recorte esta funcionando de verdad: si este mensaje sale,
-		// el jugador iba a caer mas rapido de lo permitido y el tope lo ha parado.
-		localcmd(" echo DIREKT: planeo frenando la caida");
+		// Aviso de que el recorte esta trabajando de verdad: si sale, el jugador
+		// iba a caer mas rapido de lo permitido y el tope lo ha parado. Se dice una
+		// vez por planeo, que si no sale en cada frame.
+		if (!direkt_planeo_frenado)
+		{
+			direkt_planeo_frenado = 1;
+			localcmd(" echo DIREKT: planeo frenando la caida");
+		}
 		self.velocity_z = -DIREKT_PLANEO_CAIDA;
 	}
+	else
+		direkt_planeo_frenado = 0;
 };
 
 // ------------------------------------------------------------------ salto contra

@@ -116,6 +116,136 @@ que funcionan. Cada paquete lleva un `LEE-ME-ENTORNO.md` con los detalles.
   encender con `+set scr_drawsb 1`. El inventario no aparece por la misma razón:
   solo se ve el arma.
 
+## Parkour
+
+Con una sola vida, moverse es la mecánica, no el desplazamiento. Las cinco
+habilidades están en `game/qc/parkour.qc` y todas se hacen en QuakeC: los motores
+no tocan nada del juego salvo un módulo pequeño para que el juego pueda ver dos
+teclas.
+
+### Teclas
+
+| Tecla | Qué hace |
+|---|---|
+| **Espacio** | Saltar. El motor no tiene salto: lo pone el juego (`direkt_salta`). |
+| **Shift + espacio** | **Bunny hop**: saltar sin parar y conservar la velocidad. |
+| **Shift en el aire** | **Dash**: empujón corto hacia donde miras, y **planeo** mientras caes. |
+| **Shift + pared delante + espacio** | **Salto contra la pared**: sales despedido perpendicular al muro. |
+| **Shift + pared al lado, en el aire** | **Carrera por la pared**: te pegas al muro 1,5 s. |
+| **Ctrl** | **Deslizarse**: se agacha solo y baja la fricción. |
+
+Shift es la tecla modificadora de todo el parkour. Antes ya era "correr"
+(`+speed`); ahora además la ve el juego, porque los motores la cuentan y la
+mandan como impulso:
+
+```
+set cl_teclas_juego "SHIFT=27 CTRL=28"
+```
+
+Eso es todo lo que hay que tocar para cambiar el reparto. El pulso se repite cada
+frame mientras la tecla esté mantenida, así que desde el juego es un nivel y no un
+flanco.
+
+**El bunny hop no salta solo con el espacio, a propósito.** El salto normal se
+queda como estaba y el encadenado es cosa que se pide a propósito, corriendo. Si
+rebotara solo con el espacio no habría forma de dar un salto normal y corto sin
+soltarlo, que es lo que hace falta casi siempre.
+
+### Las reglas, con números
+
+**Salto.** Impulso inicial de 270, el del Quake de siempre, más un empujón extra
+de 16 por frame mientras subes, con tope en 320. Medido: sin el empujón el salto
+llega a unos 45 y con él a 70-85 (el Quake original son unos 56). El tope está
+puesto porque con 420 los saltos pasaban de 100, el doble de la altura del
+jugador.
+
+**Bunny hop.** Al aterrizar devuelve la velocidad horizontal que tenía el vuelo
+anterior y salta otra vez. El tope general del parkour es **640** (el doble de lo
+que se anda, que es `sv_maxspeed` = 320); sin tope el momentum se acumula y el mapa
+deja de tener sentido.
+
+**Dash.** Empujón de 500 hacia donde miras, durante 0,2 s. No es "una vez y ya": si
+solo se pusiera la velocidad el primer frame, la fricción del motor se la comería
+y no duraría nada, así que se reaplica cada frame mientras dure.
+
+**Planeo.** En el aire y cayendo, la gravedad del jugador baja a **0,2** y la
+velocidad de caída se recorta a **200**. Se hace bajando el campo `gravity` de la
+entidad, que es un multiplicador por entidad que lee `SV_AddGravity`, y no
+recortando la velocidad: así el salto sigue funcionando igual y el jugador no
+pierde el control.
+
+**Salto contra la pared.** Empuje de **350** perpendicular a la cara tocada, con
+el salto normal encima. La dirección sale de la normal del `traceline`, no de
+hacia donde miras: si saltas a una pared de lado, sales por el lado más cercano.
+
+**Carrera por la pared.** 1,5 segundos como máximo, a **400** de velocidad, con un
+empujito de **180** hacia el muro. El empujito hacia dentro es lo que compensa el
+roce: `SV_WallFriction` castiga el movimiento hacia la pared y recorta la
+velocidad tangencial, así que sin pegarse la carrera se frena enseguida. Con el
+botón de salto pulsado la carrera sigue, porque el salto contra la pared se mira
+antes y el jugador sale despedido.
+
+**Deslizarse.** Se pide solo con Ctrl, y se agacha y se levanta por su cuenta (no
+hace falta F4 a la vez). Empuje de entrada de 200 y fricción propia de 12 por
+frame, así que dura más de un segundo en vez de frenarse de un tirón. Se libra del
+recorte de velocidad del agachado: sin esa excepción el recorte (que va en el
+postthink) le devolvería la velocidad al jugador cada frame y nunca pasarías de
+100. Y solo entra con una pulsación: si fuese continuo, al acabarse uno el motor
+volvería a acelerar al jugador y entraría otro, y el jugador se pegaría y se
+despegaría del suelo cada dos frames.
+
+### Prioridad en el aire
+
+Shift hace varias cosas, así que manda una:
+
+```
+carrera por la pared  >  salto contra la pared  >  dash  >  planeo
+```
+
+Junto a un muro, Shift te pega al muro; el espacio es lo que te saca de él. Sin
+muro cerca, Shift es el dash; y caer despacio es lo que siempre se puede hacer.
+
+### Fallos de fondo que salió por el camino
+
+Tres cosas que costaron y que conviene no volver a romper:
+
+1. **El motor no tiene salto.** Ni Ironwail ni Quakespasm aplican impulso de salto:
+   en `sv_user.c` no hay ni un `velocity[2] +=`, `SV_ClientThink` solo hace
+   fricción y aceleración, y el botón de salto llegaba al juego sin que el motor
+   hiciera nada con él. El juego nunca se había levantado del suelo. Por eso el
+   salto está en `direkt_salta`, en QuakeC.
+
+2. **El rayo de las sondas arrancaba dentro de la caja del jugador.** El motor
+   marca `trace_startsolid` y `trace_fraction` sale 0, que es el mismo número que
+   "no hay nada": la sonda de pared encontraba cero aunque tuviese el muro en la
+   nariz. Ahora los rayos salen por fuera de la caja (17 unidades de semi-caja + 1,
+   y 25 por debajo de los pies para el suelo).
+
+3. **X11 manda repeticiones de teclado que el motor ve como pulsar-soltar.** Con una
+   tecla modificada mantenida, el juego recibía sueltas cada 1,6 segundos: el dash,
+   el deslizamiento y el planeo se cortaban solos sin haber tocado nada. Ahora el
+   motor mantiene el impulso 0,3 s después de la tecla y el juego tiene una gracia
+   de medio segundo.
+
+### La pista de pruebas
+
+`src/test/parkour.map` es un mapa solo para esto, con la geometría justa para cada
+habilidad y sin nada que estorbe: una pista larga y lisa (864 unidades, casi tres
+segundos de carrera limpia), un hueco de 64 con fondo a 96 para el dash y el
+planeo, un muro de 864 para la carrera por la pared y dos muros enfrentados para
+el salto contra la pared.
+
+Va en **+X** y no en +Y por una razón concreta: el ángulo de la cámara lo manda el
+cliente, no el punto de aparición del mapa. Al entrar, la cámara está a 0,0,0 y el
+jugador mira a +X aunque el mapa diga otra cosa.
+
+Y el jugador nace **pegado al muro** (a 20 unidades), porque corre en línea recta:
+para tener un muro al lado tiene que nacer al lado.
+
+En el banco se comprueban las cinco por separado, con la tecla pulsada de verdad
+(`scripts/run-headless.sh --tecla`, `--golpes`, `--test-de`), porque a `+algo` no
+llega: el motor cuenta si la tecla está pulsada, no qué comando tiene enlazado.
+
 ## Qué hay aquí
 
 | Ruta | Qué es |
