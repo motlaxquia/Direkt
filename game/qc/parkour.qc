@@ -84,28 +84,54 @@ void() direkt_teclas =
 float() direkt_pulsada_mod = { return time < direkt_mod_hasta; };
 float() direkt_pulsada_deslizar = { return time < direkt_deslizar_hasta; };
 
+// ------------------------------------------------------------------ componentes
+//
+// Los sufijos que dan un componente (v_x, v_y, v_z) solo funcionan en dos sitios:
+// en un campo de entidad (self.velocity_z) y en una variable local. En un vector
+// global hay que copiarlo a una local, que es justo lo que hacen estas tres.
+//
+// Con un vector global no se puede ni por lo mas (ver la nota de mas arriba): al
+// indexar (v[2]) sale un vector y las comparaciones dan siempre falsa.
+float(vector v) direkt_vx = { return v_x; };
+float(vector v) direkt_vy = { return v_y; };
+float(vector v) direkt_vz = { return v_z; };
+
 // ------------------------------------------------------------------ suelo
 //
-// El motor no expone FL_ONGROUND a QuakeC, asi que no se puede preguntar "estoy
-// en el suelo" directamente. Se deduce con un traceline corto hacia abajo: si el
-// rayo para antes de llegar al final hay algo debajo, y si ademas la normal es
-// plana es suelo y no una pared.
+// El motor SI dice si el jugador esta en el suelo: SV_WalkMove pone
+// FL_ONGROUND en los flags de la entidad (sv_phys.c) cuando el punto de abajo
+// acaba en un plano con la normal hacia arriba. defs.qc lo declara, asi que desde
+// el juego es un simple "self.flags & FL_ONGROUND".
 //
-// El rayo sale del centro del cuerpo y llega 32 unidades. Los pies estan 24 por
-// debajo del origen, asi que 16 se quedaban cortos y nunca llegaban. Con 32
-// pasa unos 8 por debajo de los pies, que es lo justo para que andando por un
-// escalon no se pierda el suelo a ratos.
+// Y es mejor que deducirlo con un traceline por dos razones: es la verdad del
+// motor (no una aproximacion) y no se equivoca en rampas, escalones ni cajas, que
+// son justo donde una sonda corta falla.
 //
-// La normal tiene que ser de suelo (arriba) y no de pared (lateral): un rayo que
-// pega en la pared de al lado no cuenta. Por eso se mira el eje z, que es lo
-// unico que se puede mirar (ver la nota de como se lee un componente).
+// OJO con el momento: los flags se actualizan DESPUES de mover al jugador, asi que
+//   - en el postthink son los de este frame (lo nuevo)
+//   - en el prethink son los del frame anterior (un frame de retraso)
+//
+// Para decidir saltos da igual: un frame de retraso no se nota. Para medir cosas
+// hay que saber en cual de los dos se esta mirando.
+// OJO: devuelve 1 o 0, no el valor del flag (512). Con 512 cualquier
+// comparacion con "==" contra un 1 da falsa y parece que el motor y la sonda no
+// coinciden cuando si. Con "if (direkt_piso())" da igual, pero el cruce del banco
+// de pruebas compara con "==".
+float() direkt_piso =
+{
+	if (self.flags & FL_ONGROUND)
+		return 1;
+	return 0;
+};
+
+// Sonda de suelo por traceline. Ya no manda en el juego: se usa para COMPROBAR que
+// el FL_ONGROUND del motor y esta sonda dicen lo mismo, que es la unica manera de
+// saber que el motor esta aplicando la gravedad donde debe. Si un dia dejaran de
+// coincidir, el banco de pruebas lo dira en vez de que el parkour falle raro.
 #define DIREKT_SUELO_DISTANCIA 32
-// Por debajo de este valor la normal ya no es "plana" sino una rampa empinada, y
-// ahi no se hace bunny hop: en una rampa casi vertical el jugador esta cayendo,
-// no andando.
 #define DIREKT_SUELO_NORMAL_MINIMA 0.5
 
-float() direkt_piso =
+float() direkt_piso_sonda =
 {
 	local vector normal;
 
@@ -119,14 +145,17 @@ float() direkt_piso =
 
 // ------------------------------------------------------------------ pared
 //
-// Lo mismo que el suelo pero de lado. Se pasa la direccion en la que se mira
-// (normalmente v_forward o v_right) y se devuelve elocuantia pared hay.
+// Lo que hay al lado del jugador. A diferencia del suelo, aqui si hace falta la
+// normal: el salto contra la pared tiene que empujar en la direccion contraria a
+// la cara que se ha tocado, no en la direccion a la que mira el jugador.
 //
-// Devolver el dato y no un si/no, porque el dash pegado a la pared necesita saber
-// a quantas unidades esta.
-#define DIREKT_PARED_DISTANCIA 20
+// La normal se deja en una variable global, porque las funciones de QuakeC no
+// devuelven vectores. Quien la lea, la lee antes de volver a llamar aqui.
+vector	direkt_pared_normal;
 
-// Distancia a la pared que hay en la direccion dada, o 0 si no hay ninguna.
+// La distancia, o 0 si no hay nada.
+#define DIREKT_PARED_DISTANCIA 24
+
 float(vector hacia) direkt_pared =
 {
 	local float d;
@@ -138,8 +167,47 @@ float(vector hacia) direkt_pared =
 	if (trace_fraction >= 1)
 		return 0;
 
+	direkt_pared_normal = trace_plane_normal;
 	d = trace_fraction * DIREKT_PARED_DISTANCIA;
 	return d;
+};
+
+// Componentes de la ultima normal, en coordenadas locales de la pared: no
+// interested el punto exacto, solo hacia donde empuja.
+float() direkt_pared_x = { return direkt_vx(direkt_pared_normal); };
+float() direkt_pared_y = { return direkt_vy(direkt_pared_normal); };
+float() direkt_pared_z = { return direkt_vz(direkt_pared_normal); };
+
+// ------------------------------------------------------------------ velocidad
+//
+// El tope. Todo lo que de el parkour pasa por aqui.
+//
+// Sin tope, el momentum se acumula: el jugador salta, conserva la velocidad, salta
+// otra vez mas rapido, y en un minuto va a mil por segundo y el mapa deja de
+// tener sentido. Con el tope se mantiene el juego dentro de unos numeros que el
+// motor se puede manejar.
+//
+// 640 es el doble de lo que se anda (sv_maxspeed = 320), que es el salto de
+// velocidad tipico del genero. Ni tan rapido que se rompe el mapa, ni tan lento
+// que el bunny hop no compense.
+#define DIREKT_VELOCIDAD_MAXIMA 640
+
+// Recorta la velocidad horizontal al tope. La vertical no se toca: caer mas rapido
+// no es lo mismo que correr mas rapido, y el planeo ya controla esa parte.
+void() direkt_limita_velocidad =
+{
+	local vector suelo;
+	local float rapidez;
+
+	suelo = self.velocity;
+	suelo_z = 0;
+	rapidez = vlen(suelo);
+
+	if (rapidez <= DIREKT_VELOCIDAD_MAXIMA)
+		return;
+
+	self.velocity_x = suelo_x * DIREKT_VELOCIDAD_MAXIMA / rapidez;
+	self.velocity_y = suelo_y * DIREKT_VELOCIDAD_MAXIMA / rapidez;
 };
 
 // ------------------------------------------------------------------ avisos
@@ -423,4 +491,149 @@ void() direkt_desliza =
 	self.view_ofs = DIREKT_BAJO_OJO;
 
 	direkt_agacha_a(suelo, rapidez + DIREKT_DESLIZA_EMPUJE);
+};
+
+// ------------------------------------------------------------------ bunny hop
+//
+// Que es
+//
+// Mantener Shift y saltar sin soltar el espacio. Cada vez que se toca el suelo se
+// salta otra vez, pero sobre todo se conserva la velocidad del vuelo anterior: sin
+// eso no es bunny hop, es saltar很多 veces y perderlo todo en cada suelo.
+//
+// Que no se activa solo con el espacio
+//
+// A proposito. El salto normal se queda como estaba, y el encadenado es cosa que
+// se pide a proposito corriendo (Shift ya es "correr"). Si el rebote fuera solo con
+// el espacio no habria forma de dar un salto normal y corto sin soltarlo, que es lo
+// que se necesita el 90 por ciento de las veces.
+//
+// Como se conserva la velocidad
+//
+// El motor come la velocidad horizontal en el suelo: SV_ClientThink (que es donde
+// esta la friccion) va ANTES del prethink del juego. O sea que para devolver la que
+// se tenia en el aire hay que acordarse de ella y reponerla despues de la
+// friccion, que es justo lo que hace el prethink.
+//
+// El instante del salto se decide en el prethink con FL_ONGROUND, que ahi lleva un
+// frame de retraso (los flags se actualizan despues de mover). Un frame no se nota.
+//
+// El tope de 640 esta en direkt_limita_velocidad: sin tope el jugador va sumando
+// velocidad en cada salto y en un rato el mapa deja de tener sentido.
+void()	direkt_bunny_hop;
+
+float	direkt_bhop_velocidad;	// la horizontal maxima del vuelo actual
+float	direkt_bhop_aviso;
+
+// La DIRECCION del vuelo, aparte de la velocidad.
+//
+// Hace falta por esto: al aterrizar, la friccion del motor deja la velocidad
+// horizontal a cero ANTES de que llegue el prethink (SV_ClientThink va antes), asi
+// que en el frame del salto no hay ninguna direccion de la que tirar. Si se
+// repusiese la velocidad en la de ese momento, no se repone nada y el jugador se
+// queda saltando derecho. La direccion se guarda aqui, en el aire, que es cuando
+// todavia la hay.
+vector	direkt_bhop_direccion;
+
+// La maxima del vuelo, que va al informe de movimiento: es como se comprueba desde
+// fuera que el bunny hop conserva la velocidad y no solo lo parece.
+float	direkt_bhop_maxima;
+
+// Se mide en el aire, tanto en el prethink como en el postthink. En el postthink la
+// velocidad ya es la buena, que es la de despues de moverse.
+void()	direkt_bhop_mide =
+{
+	local vector suelo;
+	local float rapidez;
+
+	suelo = self.velocity;
+	suelo_z = 0;
+	rapidez = vlen(suelo);
+
+	// Sin velocidad horizontal no hay nada que guardar, y la direccion se divide
+	// por la rapidez mas abajo.
+	if (rapidez < 1)
+		return;
+
+	if (rapidez > direkt_bhop_velocidad)
+	{
+		direkt_bhop_velocidad = rapidez;
+		direkt_bhop_direccion = suelo * (1 / rapidez);
+	}
+
+	if (rapidez > direkt_bhop_maxima)
+		direkt_bhop_maxima = rapidez;
+};
+
+// El salto encadenado, en el prethink.
+void() direkt_bunny_hop =
+{
+	local vector suelo;
+	local float rapidez;
+
+	// Sin Shift no hay bunny hop: el salto de espacio es el de siempre.
+	if (!direkt_pulsada_mod())
+	{
+		direkt_bhop_velocidad = 0;
+		direkt_bhop_aviso = 0;
+		return;
+	}
+
+	// En el aire solo se mide.
+	if (!direkt_piso())
+	{
+		direkt_bhop_mide();
+		return;
+	}
+
+	// En el suelo, sin saltar, no pasa nada.
+	if (!self.button2)
+	{
+		direkt_bhop_velocidad = 0;
+		return;
+	}
+
+	// Toca saltar. OJO: aqui NO se llama a direkt_salta, porque esa mira el flanco
+	// del boton para no saltar dos veces con el mismo pulsacion. En bunny hop el
+	// boton esta pulsado SIEMPRE, asi que con el flanco solo saltaria una vez y
+	// luego no mas: el salto se pone a mano.
+	rapidez = direkt_bhop_velocidad;
+
+	if (rapidez > DIREKT_VELOCIDAD_MAXIMA)
+		rapidez = DIREKT_VELOCIDAD_MAXIMA;
+
+	// Y se repone sobre la direccion del vuelo, no sobre la velocidad de ahora,
+	// que al aterrizar es cero.
+	if (rapidez > 1)
+	{
+		self.velocity_x = direkt_vx(direkt_bhop_direccion) * rapidez;
+		self.velocity_y = direkt_vy(direkt_bhop_direccion) * rapidez;
+	}
+
+	self.velocity_z = DIREKT_SALTO_VELOCIDAD;
+	direkt_salto_alto();
+
+	// Para que el salto normal no lo repita en el mismo frame.
+	direkt_salto_boton = 1;
+
+	// A que velocidad se encadena cada salto, en tramos. El banco de pruebas
+	// comprueba que hay saltos "encadenado rapido": si no los hay, el bunny hop
+	// esta perdiendo la velocidad en cada suelo y en realidad no lo es.
+	//
+	// Los tramos estan medidos: se anda a 320 (sv_maxspeed) y con Shift se llega a
+	// unos 450, asi que por encima de 400 hay momentum de verdad.
+	if (rapidez > 400)
+		localcmd(" echo DIREKT: bunny hop encadenado rapido");
+	else if (rapidez > 250)
+		localcmd(" echo DIREKT: bunny hop encadenado normal");
+	else if (rapidez > 1)
+		localcmd(" echo DIREKT: bunny hop encadenado lento");
+	else
+		localcmd(" echo DIREKT: bunny hop sin momentum");
+
+	if (!direkt_bhop_aviso)
+	{
+		direkt_bhop_aviso = 1;
+		localcmd(" echo DIREKT: bunny hop");
+	}
 };

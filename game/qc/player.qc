@@ -40,6 +40,14 @@ void()	direkt_avisa_piso;
 void()	direkt_desliza;
 float	direkt_deslizando;
 float()	direkt_piso;
+float()	direkt_piso_sonda;
+float()	direkt_pulsada_mod;
+float()	direkt_pulsada_deslizar;
+void()	direkt_bunny_hop;
+void()	direkt_bhop_mide;
+float	direkt_bhop_maxima;
+void()	direkt_limita_velocidad;
+float()	direkt_piso_sonda;
 // Impulso extra por frame mientras se mantiene el salto subiendo. Con 16 el salto
 // queda claramente mas alto; con 40 el motor se atasca.
 #define DIREKT_SALTO_EXTRA 16
@@ -229,9 +237,19 @@ void() direkt_prethink_jugador =
 	direkt_avisa_teclas();
 	direkt_avisa_piso();
 
-	// El deslizamiento se decide antes de que el motor mueva al jugador, porque
-	// lo que hace es darle velocidad.
-	direkt_desliza();
+	// El deslizamiento, el bunny hop y el salto se deciden antes de que el motor
+	// mueva al jugador, porque lo que hacen es darle velocidad. Muerto no se hace
+	// nada de esto.
+	if (!self.deadflag)
+	{
+		direkt_desliza();
+
+		// Con el modificador, el bunny hop manda y el salto normal no se toca.
+		if (direkt_pulsada_mod())
+			direkt_bunny_hop();
+		else
+			direkt_salta();
+	}
 
 	// Si esta muerto no se hace nada hasta que le toque reaparecer.
 	if (self.deadflag)
@@ -309,9 +327,9 @@ void() direkt_prethink_jugador =
 		direkt_impulso();
 	}
 
-	// El salto, solo en vida normal: muerto no se salta.
-	if (!self.deadflag)
-		direkt_salta();
+	// El tope de velocidad, aqui al final porque manda sobre todo: si no, el dash
+	// o el planeo podrian dejar al jugador por encima del tope en el mismo frame.
+	direkt_limita_velocidad();
 
 	// Disparar.
 	if (self.button0)
@@ -335,6 +353,11 @@ void() direkt_prethink_jugador =
 void() direkt_postthink_jugador =
 {
 	direkt_agacha_anda_lento();
+
+	// Aqui, y no en el prethink, es donde la velocidad ya es la buena y donde los
+	// flags del suelo son los de este frame.
+	if (!self.deadflag && direkt_pulsada_mod() && !direkt_piso())
+		direkt_bhop_mide();
 	direkt_recorrido = direkt_recorrido + vlen(self.velocity) * frametime;
 	direkt_informa_movimiento();
 };
@@ -1186,6 +1209,30 @@ void() direkt_informa_movimiento =
 		localcmd(" echo DIREKT: apoyado en el suelo");
 	else
 		localcmd(" echo DIREKT: en el aire");
+
+	// El parkour usa FL_ONGROUND (lo que dice el motor) y la sonda de traceline
+	// solo sirve para comprobarlo. Si un dia dejaran de decir lo mismo, el salto y
+	// el parkour dejarian de funcionar sin que se notara, asi que se mira cada
+	// informe.
+	if (direkt_piso() && direkt_piso_sonda())
+		localcmd(" echo DIREKT: motor y sonda coinciden (los dos en suelo)");
+	else if (!direkt_piso() && !direkt_piso_sonda())
+		localcmd(" echo DIREKT: motor y sonda coinciden (los dos en el aire)");
+	else if (direkt_piso())
+		localcmd(" echo DIREKT: motor dice suelo y la sonda no");
+	else
+		localcmd(" echo DIREKT: la sonda dice suelo y el motor no");
+
+	// Maxima del bunny hop. En tramos porque QuakeC no imprime decimales en un
+	// "echo". Se mide en el aire y se dice aqui, que corre cada dos segundos.
+	if (direkt_bhop_maxima > 500)
+		localcmd(" echo DIREKT: bunny hop muy rapido");
+	else if (direkt_bhop_maxima > 400)
+		localcmd(" echo DIREKT: bunny hop rapido");
+	else if (direkt_bhop_maxima > 300)
+		localcmd(" echo DIREKT: bunny hop normal");
+	else if (direkt_bhop_maxima > 1)
+		localcmd(" echo DIREKT: bunny hop lento");
 
 	// Estado del agachado. La caja encogida y el ojo bajo son lo que de verdad
 	// impiden pasar por un hueco, asi que se informa de los dos.

@@ -63,8 +63,13 @@ CFG_LINE=()
 WALK=0
 TURN=0
 JUMP=0
-# --tecla SHIFT:5:3 pulsa esa tecla de verdad 5 segundos, empezando 3 segundos
-# despues de entrar en el mapa. Hace falta porque hay teclas que el juego solo ve
+# --tecla SHIFT+ESPACIO:5:3 pulsa esas teclas de verdad 5 segundos, empezando 3
+# segundos despues de entrar en el mapa.
+#
+# El "+" es un acorde: pulsan varias teclas a la vez. El bunny hop, por ejemplo, es
+# Shift y espacio a la vez, asi que con una sola tecla no se puede probar.
+#
+# --tecla SHIFT:5:3 Hace falta porque hay teclas que el juego solo ve
 # si el cliente las cuenta (ver Key_ImpulsoTeclas en los motores), y a "+algo" no
 # llega: el motor decide si la tecla esta pulsada, no que comando tenga enlazado.
 #
@@ -82,6 +87,15 @@ TECLA_ESPERA=0
 GOLPES=""
 GOLPES_VECES=0
 GOLPES_INTERVALO=0
+
+# --test-de SEGUNDOS: espera ese numero de segundos DESPUES de entrar en el mapa
+# antes de empezar a mantener la tecla.
+#
+# Existe porque las habilidades del parkour ocurren en el aire, y el aire no
+# espera: el mapa carga en un momento distinto cada vez segun la maquina, y lo
+# que interesa es "pulsar Shift cuando ya se lleva un rato corriendo". Con la
+# espera se puede colocar el momento y elqueued测量 no cambia.
+TEST_DE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -104,6 +118,7 @@ while [[ $# -gt 0 ]]; do
     --turn)     TURN=1; shift ;;
     --jump)     JUMP=1; shift ;;
     # --tecla NOMBRE[:segundos][:espera]
+    --test-de)   TEST_DE="$2"; shift 2 ;;
     # --golpes NOMBRE:veces:intervalo
     --golpes)    GOLPES="$2"; shift 2
                 if [[ "$GOLPES" == *:*:* ]]; then
@@ -298,10 +313,15 @@ if [[ -n "$GOLPES" ]]; then
     # keydown y keyup por separado, con medio segundo de pulsacion: con el
     # "key --repeat" de xdotool la pulsacion dura 12 ms, que a 60 frames por
     # segundo se pierde entera y el motor nunca ve el boton.
+    IFS=+ read -r -a _golpes <<<"$GOLPES"
     for ((_g = 0; _g < GOLPES_VECES; _g++)); do
-      xdotool keydown "$GOLPES" 2>/dev/null || true
+      for _p in "${_golpes[@]}"; do
+        xdotool keydown "$_p" 2>/dev/null || true
+      done
       sleep 0.2
-      xdotool keyup "$GOLPES" 2>/dev/null || true
+      for _p in "${_golpes[@]}"; do
+        xdotool keyup "$_p" 2>/dev/null || true
+      done
       sleep "$GOLPES_INTERVALO"
     done
   else
@@ -315,12 +335,40 @@ if ((pulsar_tecla)); then
     info "esperando ${TECLA_ESPERA}s antes de pulsar $TECLA"
     sleep "$TECLA_ESPERA"
   fi
-  xdotool keyup "$TECLA" 2>/dev/null || true
+  if [[ -n "$TEST_DE" && "$TEST_DE" -gt 0 ]]; then
+    info "esperando ${TEST_DE}s (--test-de) antes de pulsar $TECLA"
+    sleep "$TEST_DE"
+  fi
+  # El acorde se parte en teclas sueltas: xdotool keydown solo admite una.
+  IFS=+ read -r -a _partes <<<"$TECLA"
+
+  # El orden importa: los modificadores se pulsan DESPUES. Con shift ya pulsado,
+  # el espacio llega al motor como otra cosa y el boton de salto no aparece
+  # (probado: "shift+space" no salta, "space+shift" si). No es un problema del
+  # juego sino de como envia X11 las teclas combinadas, asi que el arnés lo
+  # resuelve solo y asi las pruebas no tienen que acordarse.
+  _mods=()
+  _normales=()
+  for _p in "${_partes[@]}"; do
+    case "${_p,,}" in
+      shift|shift_l|shift_r|control|ctrl|alt|super|meta) _mods+=("$_p") ;;
+      *) _normales+=("$_p") ;;
+    esac
+  done
+  _partes=("${_normales[@]}" "${_mods[@]}")
+
+  for _p in "${_partes[@]}"; do
+    xdotool keyup "$_p" 2>/dev/null || true
+  done
   sleep 0.5
-  xdotool keydown "$TECLA" 2>/dev/null || true
-  info "tecla $TECLA pulsada ${TECLA_SEGUNDOS}s"
+  for _p in "${_partes[@]}"; do
+    xdotool keydown "$_p" 2>/dev/null || true
+  done
+  info "tecla(s) $TECLA pulsada(s) ${TECLA_SEGUNDOS}s"
   sleep "$TECLA_SEGUNDOS"
-  xdotool keyup "$TECLA" 2>/dev/null || true
+  for _p in "${_partes[@]}"; do
+    xdotool keyup "$_p" 2>/dev/null || true
+  done
 fi
 
 sleep "$SETTLE"
