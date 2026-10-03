@@ -63,12 +63,25 @@ CFG_LINE=()
 WALK=0
 TURN=0
 JUMP=0
-# --tecla SHIFT:5 pulsa esa tecla de verdad durante 5 segundos del asiento.
-# Hace falta porque hay teclas que el juego solo ve si el cliente las cuenta
-# (ver Key_ImpulsoTeclas en los motores), y a "+algo" no llega: el motor decide
-# si la tecla esta pulsada, no que comando tenga enlazado.
+# --tecla SHIFT:5:3 pulsa esa tecla de verdad 5 segundos, empezando 3 segundos
+# despues de entrar en el mapa. Hace falta porque hay teclas que el juego solo ve
+# si el cliente las cuenta (ver Key_ImpulsoTeclas en los motores), y a "+algo" no
+# llega: el motor decide si la tecla esta pulsada, no que comando tenga enlazado.
+#
+# La espera existe por cosas como el deslizamiento, que solo empieza si se va
+# rapido: hay que andar un rato antes de pulsar la tecla.
 TECLA=""
 TECLA_SEGUNDOS=0
+TECLA_ESPERA=0
+
+# --golpes ESPACIO:5:0.5 pulsa la tecla 5 veces, cada media referencia. Hace falta
+# para lo que necesita un flanco y no un nivel: "+jump" en una cfg queda pulsado
+# desde antes de que entre el jugador, asi que el motor consume el flanco cuando
+# aun no hay nadie y el jugador no salta nunca. Con xdotool se pulsan y se sueltan
+# de verdad, que es lo que hace una persona.
+GOLPES=""
+GOLPES_VECES=0
+GOLPES_INTERVALO=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -90,11 +103,24 @@ while [[ $# -gt 0 ]]; do
     --walk)     WALK=1; shift ;;
     --turn)     TURN=1; shift ;;
     --jump)     JUMP=1; shift ;;
-    # --tecla NOMBRE[:segundos]
+    # --tecla NOMBRE[:segundos][:espera]
+    # --golpes NOMBRE:veces:intervalo
+    --golpes)    GOLPES="$2"; shift 2
+                if [[ "$GOLPES" == *:*:* ]]; then
+                  GOLPES_INTERVALO="${GOLPES##*:}"
+                  GOLPES="${GOLPES%:*}"
+                  GOLPES_VECES="${GOLPES##*:}"
+                  GOLPES="${GOLPES%:*}"
+                fi ;;
     --tecla)    TECLA="$2"; shift 2
-                if [[ "$TECLA" == *:* ]]; then
+                if [[ "$TECLA" == *:*:* ]]; then
+                  TECLA_ESPERA="${TECLA##*:}"
+                  TECLA="${TECLA%:*}"
                   TECLA_SEGUNDOS="${TECLA##*:}"
-                  TECLA="${TECLA%%:*}"
+                  TECLA="${TECLA%:*}"
+                elif [[ "$TECLA" == *:* ]]; then
+                  TECLA_SEGUNDOS="${TECLA##*:}"
+                  TECLA="${TECLA%:*}"
                 fi ;;
     -h|--help) sed -n '2,10p' "$0" | sed 's/^# \?//'; exit 0 ;;
     *) die "opcion desconocida: $1" ;;
@@ -261,8 +287,34 @@ if [[ -n "$TECLA" ]]; then
     info "aviso: xdotool no esta, la tecla $TECLA no se puede pulsar"
   fi
 fi
+# --------------------------------------------------- pulsaciones sueltas
+if [[ -n "$GOLPES" ]]; then
+  if command -v xdotool >/dev/null 2>&1; then
+    # Sin comprobacion aritmetica: el intervalo puede ser "0.6" y bash entero se
+    # queja de los decimales.
+    [[ -n "$GOLPES_VECES" ]] || GOLPES_VECES=1
+    [[ -n "$GOLPES_INTERVALO" ]] || GOLPES_INTERVALO=0.5
+    info "$GOLPES_VECES pulsaciones de $GOLPES cada ${GOLPES_INTERVALO}s"
+    # keydown y keyup por separado, con medio segundo de pulsacion: con el
+    # "key --repeat" de xdotool la pulsacion dura 12 ms, que a 60 frames por
+    # segundo se pierde entera y el motor nunca ve el boton.
+    for ((_g = 0; _g < GOLPES_VECES; _g++)); do
+      xdotool keydown "$GOLPES" 2>/dev/null || true
+      sleep 0.2
+      xdotool keyup "$GOLPES" 2>/dev/null || true
+      sleep "$GOLPES_INTERVALO"
+    done
+  else
+    info "aviso: xdotool no esta, $GOLPES no se puede pulsar"
+  fi
+fi
+
 if ((pulsar_tecla)); then
   ((TECLA_SEGUNDOS > 0)) || TECLA_SEGUNDOS="$SETTLE"
+  if ((TECLA_ESPERA > 0)); then
+    info "esperando ${TECLA_ESPERA}s antes de pulsar $TECLA"
+    sleep "$TECLA_ESPERA"
+  fi
   xdotool keyup "$TECLA" 2>/dev/null || true
   sleep 0.5
   xdotool keydown "$TECLA" 2>/dev/null || true

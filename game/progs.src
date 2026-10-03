@@ -15,8 +15,8 @@ qc/entities.qc
 qc/structure.qc
 qc/items.qc
 qc/weapons.qc
-qc/parkour.qc
 qc/player.qc
+qc/parkour.qc
 qc/client.qc
 qc/direkt.qc
 

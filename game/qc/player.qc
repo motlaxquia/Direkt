@@ -31,15 +31,46 @@ void()	direkt_test_muerte;
 void(entity victima)	direkt_gibs;
 void()	direkt_gib_quita;
 void()	direkt_jugador_reintentar;
+// parkour.qc va DESPUES en progs.src, porque usa DIREKT_BAJO_MAXS y DIREKT_ALTO_MAXS
+// que estan aqui. QuakeC no admite llamar a una funcion sin declararla antes, asi
+// que lo del parkour que se usa desde aqui se declara aqui.
 void()	direkt_teclas;
 void()	direkt_avisa_teclas;
 void()	direkt_avisa_piso;
+void()	direkt_desliza;
+float	direkt_deslizando;
+float()	direkt_piso;
 // Impulso extra por frame mientras se mantiene el salto subiendo. Con 16 el salto
 // queda claramente mas alto; con 40 el motor se atasca.
 #define DIREKT_SALTO_EXTRA 16
-#define DIREKT_SALTO_TOPE  640
+#define DIREKT_SALTO_TOPE  420
 
 void()	direkt_salto_alto;
+void()	direkt_salta;
+
+// ------------------------------------------------------------------ el salto
+//
+// OJO: el motor NO tiene salto.
+//
+// Se ha buscado en los dos motores y en sv_user.c no hay ni un "velocity[2] +="
+// de salto: SV_ClientThink solo hace friccion y aceleracion, y el boton de salto
+// (button2) llega al juego pero el motor no hace nada con el. El jugador nunca se
+// ha levantado del suelo en este juego, y por eso el empuje de mas abajo, que
+// solo actua mientras se sube, no habia servido nunca para nada.
+//
+// Asi que el salto se hace aqui, en QuakeC. Es el sitio bueno ademas: para el
+// parkour hace falta controlar el salto frame a frame (el salto automatico, el
+// salto contra la pared y el planeo dependen de cuando se suelta y cuando se
+// vuelve a pisar el suelo), y eso desde el motor es mucho mas enrevesado.
+//
+// El impulso inicial es el del Quake de siempre (270). Con el empuje de mas
+// arriba, el jugador llega mas alto, como en los juegos de parkour.
+#define DIREKT_SALTO_VELOCIDAD 270
+
+// El motor no lleva la cuenta de si el boton estaba pulsado en el frame anterior,
+// asi que la lleva el juego. Sin esto, con el boton mantenido se saltaria cada
+// frame desde el suelo y el jugador subiria sin parar.
+float	direkt_salto_boton;
 
 // El empuje se corta en cuanto el jugador deja de subir, para que al caer no se
 // note.
@@ -51,6 +82,25 @@ void() direkt_salto_alto =
 	self.velocity_z = self.velocity_z + DIREKT_SALTO_EXTRA;
 	if (self.velocity_z > DIREKT_SALTO_TOPE)
 		self.velocity_z = DIREKT_SALTO_TOPE;
+};
+
+// El salto en si. Va en el prethink, antes de que el motor mueva al jugador.
+void() direkt_salta =
+{
+	local float boton;
+
+	boton = self.button2;
+
+	// Solo la primera frame de cada pulsacion cuenta como salto, y solo si hay
+	// suelo debajo. Sin suelo no hay salto: en el aire el boton hace falta para
+	// otra cosa (el dash).
+	if (boton && !direkt_salto_boton && direkt_piso())
+		self.velocity_z = DIREKT_SALTO_VELOCIDAD;
+
+	direkt_salto_boton = boton;
+
+	// Y despues el empuje extra mientras se sigue subiendo.
+	direkt_salto_alto();
 };
 void()	direkt_test_muerte_pelea;
 
@@ -179,6 +229,10 @@ void() direkt_prethink_jugador =
 	direkt_avisa_teclas();
 	direkt_avisa_piso();
 
+	// El deslizamiento se decide antes de que el motor mueva al jugador, porque
+	// lo que hace es darle velocidad.
+	direkt_desliza();
+
 	// Si esta muerto no se hace nada hasta que le toque reaparecer.
 	if (self.deadflag)
 		return;
@@ -255,9 +309,9 @@ void() direkt_prethink_jugador =
 		direkt_impulso();
 	}
 
-	// El salto alto, solo en vida normal: muerto no se salta.
+	// El salto, solo en vida normal: muerto no se salta.
 	if (!self.deadflag)
-		direkt_salto_alto();
+		direkt_salta();
 
 	// Disparar.
 	if (self.button0)
@@ -325,6 +379,11 @@ void() direkt_agacha =
 		return;
 	}
 
+	// Deslizando, la caja es del deslizamiento: este codigo no la toca. Asi el
+	// deslizamiento se agacha y se levanta solo, sin depender de F4.
+	if (direkt_deslizando)
+		return;
+
 	// Ya estaba agachado.
 	if (self.maxs == DIREKT_BAJO_MAXS)
 		return;
@@ -355,6 +414,14 @@ void() direkt_agacha_anda_lento =
 	if (self.deadflag)
 		return;
 	if (self.maxs != DIREKT_BAJO_MAXS)
+		return;
+
+	// Deslizandose no se recorta: el recorte es de "agachado y andando", y el
+	// deslizamiento es justo lo contrario. Sin esta excepcion, este recorte (que
+	// va en el postthink, o sea al final) le devolveria la velocidad al jugador
+	// cada frame y nunca pasaria de 100: en vez de deslizarse se andaria
+	// agachado. Ver direkt_desliza en parkour.qc.
+	if (direkt_deslizando)
 		return;
 
 	// La componente vertical no se toca: caer y saltar van igual.

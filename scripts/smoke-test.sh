@@ -417,7 +417,121 @@ if ((probados > 0 && conefecto * 4 < probados)); then
   echo "        probados: $probados, con efecto: $conefecto" >&2
 fi
 
-head_ "8. La musica se pide por nombre"
+head_ "8. Parkour: el juego ve las teclas y el deslizamiento funciona"
+
+# Las teclas del parkour llegan al juego como impulso, porque el motor solo
+# manda "mover, disparar, usar, saltar" y un impulso: ni Shift ni Ctrl se ven de
+# otra forma. Shift es el modificador (mas adelante sera el dash) y Ctrl el
+# deslizamiento.
+#
+# Se pulsan de verdad con xdotool. Si xdotool no esta (el banco de Linux lo
+# instala, los demas no), se dice y se salta: es mejor que un fallo que parece
+# del juego y no lo es.
+if ! command -v xdotool >/dev/null 2>&1; then
+  printf '  \033[33mNOSE\033[0m  xdotool no esta: las pruebas de teclas no se pueden hacer\n'
+else
+  LOG="$LOGS/run-$MAP.log"
+
+  # El modificador se ve al pulsar y al soltar. Si no aparecen las dos, el juego
+  # no esta viendo la tecla.
+  if "$REPO_ROOT/scripts/run-headless.sh" --map "$MAP" --settle 6 --min-lit 0 \
+       --golpes "space:4:0.6" --tecla "shift:3" >"$BUILD/parkour-mod.out" 2>&1; then
+    _pulsado="$(grep -c "modificador pulsado" "$LOG" || true)"
+    _soltado="$(grep -c "modificador soltado" "$LOG" || true)"
+    if ((_pulsado > 0 && _soltado > 0)); then
+      ok "el juego ve Shift (pulsado $_pulsado, soltado $_soltado)"
+    else
+      ko "el juego no ve Shift: el motor no pasa la tecla"
+      tail -10 "$BUILD/parkour-mod.out" >&2
+    fi
+  else
+    ko "el motor no arranco con Shift pulsada"
+    tail -10 "$BUILD/parkour-mod.out" >&2
+  fi
+
+  # El suelo tiene que detectarse: sin el, el parkour entero no hace nada.
+  # Con --jump el jugador se separa del suelo y vuelve, asi que tienen que verse
+  # las dos señales: perderla solo y no volver a encontrarla tambien seria un fallo,
+  # por eso se mira que las dos esten.
+  if ((_pulsado > 0)); then
+    _aire="$(grep -c "en el aire" "$LOG" || true)"
+    _suelo="$(grep -c "en el suelo" "$LOG" || true)"
+    if ((_aire > 0 && _suelo > 0)); then
+      ok "el suelo se detecta y se pierde al saltar"
+    else
+      ko "el suelo no se detecta bien (aire=$_aire suelo=$_suelo)"
+    fi
+  fi
+
+  # El salto. El motor no tiene ninguno (esta implementado en el juego, ver
+  # direkt_salta), asi que esta comprobacion es la que dice si el jugador se
+  # levanta de verdad. Sin --golpes no serviria: "+jump" en una cfg se queda
+  # pulsado desde antes de que entre el jugador y el motor se come el flanco.
+  # Se mide en direkt-test y no en el mapa grande: en un mapa con techos bajos el
+  # vuelo se corta y la altura sale otra cosa.
+  if "$REPO_ROOT/scripts/run-headless.sh" --map direkt-test --settle 5 --min-lit 0 \
+       --golpes "space:4:0.6" >"$BUILD/parkour-salto.out" 2>&1; then
+    LOG="$LOGS/run-direkt-test.log"
+    _alto="$(grep -cE "el salto es (alto|gigante)" "$LOG" || true)"
+    _corto="$(grep -cE "el salto es (corto|normal)" "$LOG" || true)"
+
+    if ((_alto > 0)); then
+      ok "el jugador salta y el empuje lo hace alto ($_alto saltos)"
+    else
+      ko "nadie ha saltado alto: solo $_corto saltos cortos"
+      tail -10 "$BUILD/parkour-salto.out" >&2
+    fi
+  else
+    ko "el motor no arranco saltando"
+    tail -10 "$BUILD/parkour-salto.out" >&2
+  fi
+
+  # El deslizamiento: hay que ir rapido (por eso la espera antes de pulsar) y
+  # agachado, y el deslizamiento se agacha solo. Lo que se comprueba es que
+  # entra, que sale por el tramo alto (o sea que se libra del recorte de
+  # velocidad del agachado, que lo dejaria todo en 100) y que se acaba al soltar.
+  if "$REPO_ROOT/scripts/run-headless.sh" --map "$MAP" --settle 6 --min-lit 0 \
+       --walk --tecla "ctrl:6:5" >"$BUILD/parkour-slide.out" 2>&1; then
+    LOG="$LOGS/run-$MAP.log"
+    _entradas="$(grep -c "DIREKT: deslizando" "$LOG" || true)"
+    _salidas="$(grep -c "se acaba el deslizamiento" "$LOG" || true)"
+    _rapido="$(grep -cE "el deslizamiento sale (muy )?rapido" "$LOG" || true)"
+
+    if ((_entradas > 0)); then
+      ok "el deslizamiento entra ($_entradas)"
+    else
+      ko "el deslizamiento nunca entra"
+      tail -10 "$BUILD/parkour-slide.out" >&2
+    fi
+
+    if ((_rapido > 0)); then
+      ok "el deslizamiento sale por encima del tope de agachado"
+    else
+      ko "el deslizamiento sale por debajo del tope de agachado"
+      echo "        log: $LOG" >&2
+    fi
+
+    if ((_salidas > 0)); then
+      ok "el deslizamiento se acaba al soltar la tecla"
+    else
+      ko "el deslizamiento no se acaba nunca"
+    fi
+
+    # Un deslizamiento y ya: si se re-dispara solo, el jugador se pega y se
+    # despegaria del suelo cada dos frames.
+    if ((_entradas <= 2)); then
+      ok "el deslizamiento no se repite solo ($_entradas veces)"
+    else
+      ko "el deslizamiento se repite: $_entradas veces con la tecla seguida"
+      echo "        log: $LOG" >&2
+    fi
+  else
+    ko "el motor no arranco con Ctrl pulsada"
+    tail -10 "$BUILD/parkour-slide.out" >&2
+  fi
+fi
+
+head_ "9. La musica se pide por nombre"
 
 # La musica se puede pedir de dos maneras y las dos tienen que funcionar:
 #
