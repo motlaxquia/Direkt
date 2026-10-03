@@ -598,6 +598,12 @@ void(entity victima) direkt_muerte_jugador =
 	victima.think = direkt_jugador_cae;
 	victima.nextthink = time + 0.5;
 
+	// La camara se queda recta al morir. No se puede decidir desde el cliente si
+	// el jugador esta muerto, porque la vida vive en el QC del servidor, con lo
+	// que se le avisa con un cvar. "1" es una palabra suelta, sin espacios, que
+	// es lo unico que pasa bien desde QuakeC.
+	stuffcmd(victima, "cl_deadnoroll 1");
+
 	// El ENTER para reintentar se enlaza aqui. Esto SI funciona: "bind" es un
 	// comando normal y el motor lo ejecuta tal cual.
 	stuffcmd(victima, "bind KP_ENTER \"impulse 26\"");
@@ -638,6 +644,8 @@ void() direkt_jugador_reintentar =
 	if (!self.deadflag)
 		return;
 
+	// Y al volver, la camara vuelve a inclinarse con el movimiento.
+	stuffcmd(self, "cl_deadnoroll 0");
 	self.think = direkt_nada;
 	self.nextthink = 0;
 	PutClientInServer();
