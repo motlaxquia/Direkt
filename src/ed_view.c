@@ -131,13 +131,22 @@ void ed_cam_ray(const ed_cam_t *cam, float sx, float sy, vec3_t org, vec3_t dir)
 	ed_cam_right(cam, r);
 	ed_cam_up(cam, up);
 
-	half = tanf(cam->fov * 0.5f * DEG2RAD);
-	aspect = (cam->height > 0) ? (float)cam->width / (float)cam->height : 1.0f;
+	if (cam->iso) {
+		/* En isometrico no hay perspectiva: un pixel son iso_scale unidades de
+		 * mundo en las dos direcciones, y el rayo sale en diagonal. Sin esto,
+		 * pinchar en un sitio y pinchar en el brushes de ahi dejarian de
+		 * cuadrar justo en la vista nueva. */
+		nx = (sx - (float)cam->width * 0.5f) * cam->iso_scale;
+		ny = ((float)cam->height * 0.5f - sy) * cam->iso_scale;
+	} else {
+		half = tanf(cam->fov * 0.5f * DEG2RAD);
+		aspect = (cam->height > 0) ? (float)cam->width / (float)cam->height : 1.0f;
 
-	/* El pixel va de -1 a 1, con y hacia arriba (la ventana crece hacia
-	 * abajo, la vista hacia arriba). */
-	nx = ((sx / (float)cam->width) * 2.0f - 1.0f) * half * aspect;
-	ny = (1.0f - (sy / (float)cam->height) * 2.0f) * half;
+		/* El pixel va de -1 a 1, con y hacia arriba (la ventana crece hacia
+		 * abajo, la vista hacia arriba). */
+		nx = ((sx / (float)cam->width) * 2.0f - 1.0f) * half * aspect;
+		ny = (1.0f - (sy / (float)cam->height) * 2.0f) * half;
+	}
 
 	for (int i = 0; i < 3; i++)
 		dir[i] = f[i] + r[i] * nx + up[i] * ny;
@@ -207,6 +216,91 @@ void ed_matrix_perspective(float *m, float fovy, float aspect, float znear, floa
 	m[10] = (zfar + znear) * rn;
 	m[11] = -1.0f;
 	m[14] = 2.0f * zfar * znear * rn;
+}
+
+void ed_matrix_ortho(float *m, float l, float r, float b, float t, float znear, float zfar)
+{
+	memset(m, 0, 16 * sizeof(float));
+	m[0] = 2.0f / (r - l);
+	m[5] = 2.0f / (t - b);
+	m[10] = -2.0f / (zfar - znear);
+	m[12] = -(r + l) / (r - l);
+	m[13] = -(t + b) / (t - b);
+	m[14] = -(zfar + znear) / (zfar - znear);
+	m[15] = 1.0f;
+}
+
+void ed_cam_projection(const ed_cam_t *cam, float *m)
+{
+	float aspect;
+
+	if (cam->iso) {
+		aspect = (cam->height > 0) ? (float)cam->width / (float)cam->height : 1.0f;
+		ed_matrix_ortho(m, -aspect * 0.5f, aspect * 0.5f,
+		                -0.5f, 0.5f, -16.0f, 16.0f);
+		return;
+	}
+	aspect = (cam->height > 0) ? (float)cam->width / (float)cam->height : 1.0f;
+	ed_matrix_perspective(m, cam->fov, aspect, cam->znear, 65536.0f);
+}
+
+/* La diagonal clasica del isometrico: 45 grados de giro y unos 35 grados de
+ * caida. No son los 30 exactos del manual, porque con 30 el suelo se ve tan
+ * escorzo que las paredes de atras se confunden con las de delante. */
+#define DIREKT_ISO_PITCH 35.264f
+
+/* Coloca el ojo a "dist" del objetivo, en la diagonal que marque el yaw. La
+ * caida de 35 grados es la del isometrico de manual; con 30 el suelo se ve tan
+ * escorzo que las paredes de atras se confunden con las de delante. */
+static void ed_cam_iso_colocar(ed_cam_t *cam, float dist)
+{
+	float yaw = cam->iso_yaw * DEG2RAD;
+	float pitch = DIREKT_ISO_PITCH * DEG2RAD;
+
+	/* El ojo va por la direccion opuesta a la que mira, hacia atras y arriba. */
+	cam->ang[0] = -DIREKT_ISO_PITCH;
+	cam->ang[1] = cam->iso_yaw;
+	cam->org[0] = cam->iso_target[0] - dist * cosf(yaw) * cosf(pitch);
+	cam->org[1] = cam->iso_target[1] - dist * sinf(yaw) * cosf(pitch);
+	cam->org[2] = cam->iso_target[2] + dist * sinf(pitch);
+}
+
+void ed_cam_iso(ed_cam_t *cam, vec3_t target)
+{
+	cam->iso = 1;
+	cam->iso_yaw = 45.0f;
+	cam->iso_scale = 0.5f;
+	VectorCopy(target, cam->iso_target);
+	ed_cam_iso_colocar(cam, 2048.0f);
+}
+
+void ed_cam_iso_zoom(ed_cam_t *cam, float factor)
+{
+	float dist;
+
+	/* Menos unidades por pixel es mas zoom. Sin limites, con la rueda del raton
+	 * se acaba en un numero tan pequeno que el flotante se come el mundo
+	 * entero. */
+	cam->iso_scale *= factor;
+	if (cam->iso_scale < 0.001f)
+		cam->iso_scale = 0.001f;
+	if (cam->iso_scale > 40.0f)
+		cam->iso_scale = 40.0f;
+
+	/* El zoom tambien mueve el ojo, y si no se queda mirando al mismo sitio y
+	 * el nivel se ve mas grande sin que se note hacia donde. */
+	dist = 2048.0f * cam->iso_scale / 0.5f;
+	ed_cam_iso_colocar(cam, dist);
+}
+
+void ed_cam_iso_turn(ed_cam_t *cam, float yaw)
+{
+	cam->iso_yaw += yaw;
+	/* El objetivo se queda quieto, que es lo que hace util girar: el mapa no se
+	 * va de sitio mientras se busca el otro lado. */
+	if (cam->iso_yaw > 3600.0f || cam->iso_yaw < -3600.0f)
+		cam->iso_yaw = (cam->iso_yaw > 0.0f) ? 0.0f : 0.0f;
+	ed_cam_iso_colocar(cam, 2048.0f * cam->iso_scale / 0.5f);
 }
 
 void ed_matrix_look_at(float *m, vec3_t eye, vec3_t fwd, vec3_t up)

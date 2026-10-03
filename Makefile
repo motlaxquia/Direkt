@@ -287,7 +287,7 @@ BSP_SRC   := $(addprefix $(REPO)/src/,$(CORE_SRC)) $(REPO)/src/main.c
 MAP       ?= lqdm1
 BSP_MAP   ?= $(REPO)/src/test/habitacion.map
 
-EDIT_SRC  := $(addprefix $(REPO)/src/,$(CORE_SRC) ed_doc.c ed_view.c ed_gui.c \
+EDIT_SRC  := $(addprefix $(REPO)/src/,$(CORE_SRC) ed_doc.c ed_lvl.c ed_view.c ed_gui.c \
                               edtex.c ed_test.c ed_main.c)
 EDIT_HDR  := editor.h ed_view.h ed_gui.h edtex.h
 # El OpenGL se enlaza de tres maneras distintas segun el sistema, y equivocarse

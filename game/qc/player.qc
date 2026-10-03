@@ -30,8 +30,6 @@ void()	direkt_test_suelo;
 void()	direkt_test_muerte;
 void(entity victima)	direkt_gibs;
 void()	direkt_gib_quita;
-void()	direkt_fantasma;
-void()	direkt_fantasma_muere;
 void()	direkt_jugador_reintentar;
 // Impulso extra por frame mientras se mantiene el salto subiendo. Con 16 el salto
 // queda claramente mas alto; con 40 el motor se atasca.
@@ -218,8 +216,8 @@ void() direkt_prethink_jugador =
 		self.nextthink = time + 0.5;
 	}
 	// El 26 es el Enter que se enlaza al morir: lleva a reintentar. Se mira
-	// antes que el resto porque solo tiene sentido con el fantasma, y no vale
-	// nada en vida normal.
+	// antes que el resto porque solo tiene sentido muerto, y no vale nada en
+	// vida normal.
 	else if (self.impulse == 26)
 	{
 		self.impulse = 0;
@@ -241,8 +239,8 @@ void() direkt_prethink_jugador =
 		direkt_impulso();
 	}
 
-	// El salto alto, en la vida normal y tambien de fantasma.
-	if (!self.deadflag || self.movetype == MOVETYPE_FLY)
+	// El salto alto, solo en vida normal: muerto no se salta.
+	if (!self.deadflag)
 		direkt_salto_alto();
 
 	// Disparar.
@@ -466,15 +464,13 @@ void() direkt_muerte_ente =
 //
 //   * Explota en pedazos, como los enemigos cuando mueren de un golpe.
 //   * Se apagan el cuerpo y el arma.
-//   * Se queda flotando como fantasma. Vuela con la gravedad puesta a cero, y
-//     sigue chocando con el mundo: es volar, no es noclip.
+//   * El cadaver cae y se queda. La camara lo sigue por la cabeza, sola.
 //   * Abajo sale un aviso para reintentar con Enter.
 //
-// Y hay un detalle del motor que condiciona todo esto: SV_ClientThink (FTE) y su
+// Y hay un detalle del motor que encaja con esto: SV_ClientThink (FTE) y su
 // equivalente en Quakespasm hacen "if (health <= 0) return", o sea que un
-// jugador con la vida a cero NO se mueve de ninguna manera. Por eso el fantasma
-// conserva una vida de mentira: lo que dice que esta muerto es deadflag, no la
-// vida. Si se dejara a cero, el fantasma se quedaria clavado.
+// jugador con la vida a cero no se mueve por si mismo. Por eso el cadaver se
+// limita a caer: es el motor quien lleva la camara detras de la cabeza.
 
 void(entity victima) direkt_gibs =
 {
@@ -526,47 +522,11 @@ void(entity victima) direkt_gibs =
 // los nuestros igual.
 void() direkt_gib_quita = { remove(self); };
 
-// El fantasma se dibuja con un par de sprites de explosion, que son translucidos
 // de por si. La alternativa era poner el modelo del jugador a media
 // transparencia, pero el campo alpha no existe en el lado de QuakeC: es una
 // extension del motor que no se puede tocar desde el juego, y anadirla obliga a
 // cambiar la tabla de campos que comparten los dos motores. Con sprites se ve
 // translucido de verdad y sin tocar nada del motor.
-float direkt_fantasma_fase;
-
-void() direkt_fantasma =
-{
-	local entity s;
-
-	if (!self.deadflag)
-		return;
-
-	s = spawn();
-	s.classname = "direkt_fantasma_sprite";
-	s.solid = SOLID_NOT;
-	s.movetype = MOVETYPE_NONE;
-	s.model = "progs/s_explod.spr";
-	setmodel(s, s.model);
-
-	// s_explod.spr tiene seis cuadros (lo dice tools/sprinfo.py). Se van
-	// alternando para que la nube se mueva sola, y se vuelve a cero al llegar
-	// al ultimo: en QuakeC no hay modulo.
-	direkt_fantasma_fase = direkt_fantasma_fase + 1;
-	if (direkt_fantasma_fase > 5)
-		direkt_fantasma_fase = 0;
-	s.frame = direkt_fantasma_fase;
-	s.origin = self.origin;
-	s.origin_z = self.origin_z + 12;
-	s.angles = self.angles;
-	s.effects = EF_BRIGHTFIELD;
-
-	s.think = direkt_fantasma_muere;
-	s.nextthink = time + 0.12;
-}
-
-void() direkt_fantasma_muere = { remove(self); };
-
-// La muerte del jugador.
 void(entity victima) direkt_muerte_jugador =
 {
 	if (victima.deadflag)
@@ -586,27 +546,26 @@ void(entity victima) direkt_muerte_jugador =
 	victima.takedamage = DAMAGE_NO;
 	victima.frame = 0;
 
-	// El cuerpo y el arma se apagan. El modelo es lo primero que ve el jugador
-	// al morir, asi que tiene que desaparecer antes que nada.
-	victima.model = "";
+	// El arma se apaga, pero el cuerpo se queda: lo que se ve al morir es el
+	// cadaver cayendo, que es justo lo que sigue la camara.
 	victima.weaponmodel = "";
 	victima.weaponframe = 0;
 
-	// La vida se queda en uno a proposito: el motor no mueve a quien tiene la
-	// vida a cero. Lo que dice que esta muerto es deadflag.
-	victima.health = 1;
+	victima.health = 0;
 	victima.max_health = DIREKT_MAX_HEALTH;
 	victima.armorvalue = 0;
 	victima.items = 0;
 	victima.currentammo = 0;
 
-	// El fantasma vuela sin gravedad y sigue chocando con el mundo. Nada de
-	// noclip: solid se queda en SLIDEBOX y es SV_FlyMove el que lo mueve.
-	victima.movetype = MOVETYPE_FLY;
-	victima.gravity = 0;
-	victima.solid = SOLID_SLIDEBOX;
-	victima.velocity = VEC_ORIGIN;
-	victima.flags = 0;
+	// El cuerpo cae y se queda tirado. Con la vida a cero el motor no lo mueve
+	// (SV_ClientThink: "if (health <= 0) return"), con lo que basta con dejar que
+	// caiga por gravedad y se quede quieto. La camara lo sigue sola, porque la
+	// vista va enganchada a la cabeza del jugador.
+	victima.movetype = MOVETYPE_TOSS;
+	victima.gravity = 1;
+	victima.velocity_z = 100;
+	victima.think = direkt_jugador_cae;
+	victima.nextthink = time + 0.5;
 
 	// El ENTER para reintentar se enlaza aqui. Esto SI funciona: "bind" es un
 	// comando normal y el motor lo ejecuta tal cual.
@@ -628,18 +587,18 @@ void(entity victima) direkt_muerte_jugador =
 	// varios "scr_msgline" con un separador, o un comando del motor que lo lea de
 	// otro sitio. Hasta entonces el motor lo dibuja pero el juego no lo llama.
 
-	// El fantasma, y a los tres segundos, otra vez al principio.
-	victima.think = direkt_fantasma;
-	victima.nextthink = time + 0.05;
-	direkt_tiempo_muerte = time + 3;
 	localcmd(" echo DIREKT: el jugador muere");
 }
 
-// El aviso de "moriste" se queda puesto hasta que se pulse Enter.
+// El cadaver toca el suelo y se queda. No hay respawn automatico: el jugador
+// reintenta con Enter, que es el impulso 26.
 void() direkt_jugador_cae =
 {
-	if (self.deadflag)
-		return;
+	self.deadflag = DEAD_DEAD;
+	self.movetype = MOVETYPE_NONE;
+	self.velocity = VEC_ORIGIN;
+	self.think = direkt_nada;
+	self.nextthink = 0;
 }
 
 // Reintentar: lo mismo que reaparecer, pero porque el jugador ha pedido.

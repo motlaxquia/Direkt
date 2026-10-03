@@ -28,11 +28,31 @@
  * se compila, y save_map escribe exactamente lo que hay. Un editor con dos
  * representaciones del mapa siempre acaba con una de las dos desfasada.
  */
+/* ---- .drklvl, el formato de nivel ----
+ *
+ * Un .drklvl es la cabecera (nombre, autor, descripcion) con el .map dentro. Todo
+ * en texto, para que se abra con cualquier editor y no haga falta el juego para
+ * mirarlo. El juego lee .bsp, no .drklvl: el nivel se compila antes.
+ */
+#define ED_LVL_EXTRA_MAX 15
+
+typedef struct {
+    char *nombre;
+    char *autor;
+    char *descripcion;
+    char *niveles;  /* spawnpoints, etc., como lista de "x y z" */
+    char *extra[ED_LVL_EXTRA_MAX + 1];
+    int   n_extra;
+} ed_lvl_meta_t;
+
 typedef struct ed_doc_s {
 	map_t *map;
 	char *filename;    /* de donde se cargo, o NULL si es nuevo */
 	char *title;       /* nombre corto para el titulo de la ventana */
 	int dirty;         /* hay cambios sin guardar */
+	/* Cabecera del .drklvl. Solo se usa si el fichero es de ese tipo; con un
+	 * .map normal se queda vacia y no estorba. */
+	ed_lvl_meta_t meta;
 	int show_grid;
 	int grid_size;
 	int show_triggers; /* los triggers se dibujan aparte, mas claro */
@@ -53,6 +73,13 @@ typedef struct ed_doc_s {
 	int numredo;
 	int redocap;
 } ed_doc_t;
+
+/* ---- .drklvl ---- */
+int ed_lvl_es_drklvl(const char *filename);
+int ed_lvl_write(struct ed_doc_s *doc, const char *filename, ed_lvl_meta_t *meta);
+int ed_lvl_read(const char *filename, ed_lvl_meta_t *meta, char **mapa);
+void ed_lvl_meta_free(ed_lvl_meta_t *meta);
+
 
 ed_doc_t *ed_doc_new(void);
 ed_doc_t *ed_doc_load(const char *filename);

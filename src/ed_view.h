@@ -22,6 +22,14 @@ typedef struct {
 	float fov;     /* vertical, en grados */
 	int width, height;
 	float znear;   /* plano cercano; muy pequena para que no se recorte */
+	/* Modo isometrico. Con iso a 0 todo esto da igual y la vista es la de
+	 * siempre, en perspectiva. Con iso a 1 la proyeccion es ortogonal y la
+	 * camara mira en diagonal, que es lo que hace que se vea como un plano
+	 * elevado de una vez. */
+	int   iso;     /* 1 = isometrica */
+	float iso_yaw; /* giro alrededor del eje vertical, en grados */
+	float iso_scale;/* unidades de mundo por pixel, que fija el zoom */
+	vec3_t iso_target; /* punto que se queda quieto al girar y al hacer zoom */
 } ed_cam_t;
 
 void ed_cam_init(ed_cam_t *cam, vec3_t target);
@@ -46,6 +54,18 @@ float ed_ray_point_dist(vec3_t org, vec3_t dir, vec3_t p);
 /* ---- matrices en columna-mayor, como las que espera glLoadMatrixf ---- */
 void ed_matrix_identity(float *m);
 void ed_matrix_perspective(float *m, float fovy, float aspect, float znear, float zfar);
+/* Ortogonal, que es la que usa la vista isometrica. left/right/bottom/top van
+ * en unidades de mundo, ya que en esta proyeccion no hay profundidad. */
+void ed_matrix_ortho(float *m, float l, float r, float b, float t, float znear, float zfar);
+/* La matriz de proyeccion que le toca a la camara, segun sea perspectiva o
+ * isometrica. Lo llama el dibujo y lo llama tambien ed_cam_ray, para que el
+ * raton y lo que se ve no puedan separarse. */
+void ed_cam_projection(const ed_cam_t *cam, float *m);
+/* Pone la camara en modo isometrico mirando a target desde una diagonal. */
+void ed_cam_iso(ed_cam_t *cam, vec3_t target);
+/* Ajustes de zoom y giro en modo isometrico. */
+void ed_cam_iso_zoom(ed_cam_t *cam, float factor);
+void ed_cam_iso_turn(ed_cam_t *cam, float yaw);
 void ed_matrix_look_at(float *m, vec3_t eye, vec3_t fwd, vec3_t up);
 void ed_matrix_multiply(float *out, const float *a, const float *b);
 
