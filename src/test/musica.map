@@ -1,0 +1,29 @@
+// Caja solida de 64 unidades con la musica pedida por nombre. La clave "music"
+// del worldspawn es de Direkt: el motor busca ese fichero en la carpeta music/
+// en vez de montar "music/trackNN.ogg" a partir de un numero.
+//
+// El numero de la pista se saca de la lista, que escribe el comando
+// bgm_catalogo dentro del juego.
+{
+"classname" "worldspawn"
+"wad" "gfx.wad"
+"music" "track05.ogg"
+{
+( 64 0 0 )( 64 64 0 )( 64 64 64 )( 64 0 64 ) wall1
+( 0 0 0 )( 0 0 64 )( 0 64 64 )( 0 64 0 ) wall1
+( 0 64 0 )( 0 64 64 )( 64 64 64 )( 64 64 0 ) wall1
+( 0 0 0 )( 64 0 0 )( 64 0 64 )( 0 0 64 ) wall1
+( 0 0 64 )( 64 0 64 )( 64 64 64 )( 64 0 64 ) wall1
+( 0 0 0 )( 0 64 0 )( 64 64 0 )( 64 0 0 ) wall1
+}
+}
+{
+"classname" "info_player_start"
+"origin" "-224 -224 -32"
+"angle" "90"
+}
+{
+"classname" "light"
+"origin" "32 32 96"
+"light" "300"
+}

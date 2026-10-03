@@ -1,0 +1,31 @@
+// Caja solida de 64 unidades que pide una pista que no existe.
+//
+// Es la forma de Direkt pero con un nombre que no esta en music/. El motor tiene
+// que decirlo en vez de quedarse mudo sin avisar, y ademas seguir por el numero
+// para que el mapa no se quede sin musica ninguna.
+//
+// La lista de lo que hay de verdad la escribe el comando bgm_catalogo.
+
+{
+"classname" "worldspawn"
+"wad" "gfx.wad"
+"music" "no-existe.ogg"
+{
+( 64 0 0 )( 64 64 0 )( 64 64 64 )( 64 0 64 ) wall1
+( 0 0 0 )( 0 0 64 )( 0 64 64 )( 0 64 0 ) wall1
+( 0 64 0 )( 0 64 64 )( 64 64 64 )( 64 64 0 ) wall1
+( 0 0 0 )( 64 0 0 )( 64 0 64 )( 0 0 64 ) wall1
+( 0 0 64 )( 64 0 64 )( 64 64 64 )( 64 0 64 ) wall1
+( 0 0 0 )( 0 64 0 )( 64 64 0 )( 64 0 0 ) wall1
+}
+}
+{
+"classname" "info_player_start"
+"origin" "-224 -224 -32"
+"angle" "90"
+}
+{
+"classname" "light"
+"origin" "32 32 96"
+"light" "300"
+}

@@ -1079,6 +1079,45 @@ bsp_t *compile_map(map_t *map)
 		else
 			fprintf(stderr, "direkt-bsp: %d hojas, todas dentro o fuera de "
 			                "sus brushes\n", hojas);
+
+		/*
+		 * Aviso de musica. Un mapa se puede pedir de dos maneras:
+		 *
+		 *   "music" "bosque.ogg"   Direkt. Se busca ese fichero en music/.
+		 *   "sounds" "5"          toda la vida. El 5 es el numero de pista.
+		 *
+		 * El numero no dice nada de cual es cual, asi que lo primero es
+otrejar que la forma larga este a mano. Si no hay ninguna de las dos,
+		 * el mapa se queda sin musica y no hay forma de saber si fue eso o si
+		 * el motor no la encuentra, asi que se avisa.
+		 *
+		 * No se comprueba que el fichero exista: este compilador no sabe donde
+		 * esta la carpeta music/, y aun asi lo falso seria peor que callarse.
+		 */
+		{
+			entity_t *e;
+			const char *nombre = NULL;
+			const char *numero = NULL;
+
+			for (e = map->entities; e; e = e->next) {
+				if (!e->is_world)
+					continue;
+				nombre = entity_key(e, "music");
+				numero = entity_key(e, "sounds");
+				break;
+			}
+
+			if (nombre && nombre[0])
+				fprintf(stderr, "direkt-bsp: musica del mapa: %s\n", nombre);
+			else if (numero && numero[0])
+				fprintf(stderr, "direkt-bsp: musica del mapa: pista %s "
+				                "(numero; usa \"music\" para ponerla por "
+				                "nombre)\n", numero);
+			else
+				fprintf(stderr, "direkt-bsp: aviso, este mapa no pide musica: "
+				                "pon \"music\" \"nombre.ogg\" en el "
+				                "worldspawn\n");
+		}
 	}
 
 	make_faces();

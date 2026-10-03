@@ -239,6 +239,80 @@ se mueven, ni submodelos. Las brushes móviles del `.map` se descartan al
 compilar, así que un mapa con puertas móviles no funcionará hasta que eso esté
 hecho.
 
+## La música se pide por nombre
+
+La música de un mapa se puede pedir de dos maneras. La de siempre, con un número:
+
+```
+"sounds" "5"                // el motor monta music/track05.ogg
+```
+
+El 5 no dice nada. No se sabe qué pista es cuál sin abrir los ficheros, y no se
+puede elegir una pista que no se llame `trackNN`. Con varias pistas de LibreQuake
+el orden acaba siendo el del número, que es un orden arbitrario.
+
+Direkt admite además el nombre del fichero:
+
+```
+"music" "bosque.ogg"        // el motor busca ese fichero en music/
+```
+
+Da igual dónde esté el fichero y da igual cómo se llame: `track02`, `bosque` o
+`nivel1_marcha`. También vale sin extensión (`"music" "bosque"`), y entonces
+suena la primera que encaje.
+
+Las dos formas conviven. Un mapa con `"sounds"` sigue yendo exactamente por su
+camino de antes, byte a byte: el servidor manda el número y el motor lo monta
+igual que siempre. Para que no se pisen, el segundo byte que ya viajaba en
+`svc_cdtrack` dice cuál de las dos es.
+
+Para ver qué hay y en qué orden, dentro del juego:
+
+```
+bgm_catalogo
+```
+
+```
+10 pistas en music/:
+    1  music/track02.ogg
+    2  music/track03.ogg
+    3  music/track04.ogg
+    4  music/track05.ogg
+    ...
+```
+
+Los índices empiezan por 1; el 0 es "ninguna", como siempre.
+
+La lista sale de las rutas de búsqueda del motor, no de un directorio suelto: el
+juego arranca con `-basedir datos` y la música está en `datos/music/`, así que un
+`music/` a pelo no valdría. Por eso da igual dónde esté. Y va **ordenada por
+nombre**, porque el orden en que un sistema devuelve un directorio no está
+garantizado: si el índice dependiera de ahí, el número que manda el servidor no
+significaría lo mismo en el cliente.
+
+Solo se ven los ficheros sueltos de los directorios. Si alguien mete música
+dentro de un PAK, la clave `"music"` no lo encontrará y seguirá mandando la pista
+por número, que es lo de siempre. La música de Direkt va suelta, así que no pasa.
+
+Si el mapa pide una pista que no está, el motor lo dice en vez de quedarse mudo:
+
+```
+El mapa pide la música "no-existe.ogg" y no está en music/
+```
+
+y sigue por el número, para que el mapa no se quede sin música ninguna.
+
+`direkt-bsp` también avisa, al compilar:
+
+```
+direkt-bsp: música del mapa: bosque.ogg
+direkt-bsp: música del mapa: pista 5 (número; usa "music" para ponerla por nombre)
+direkt-bsp: aviso, este mapa no pide música: pon "music" "nombre.ogg" en el worldspawn
+```
+
+No comprueba que el fichero exista: el compilador no sabe dónde está la carpeta
+`music/`, y un aviso falso es peor que callarse.
+
 ## El editor: `direkt-edit`
 
 Un mapa propio se coloca mucho mejor con un editor que editando el `.map` a mano,

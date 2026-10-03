@@ -6,11 +6,17 @@
 # hay dentro sin abrir el fichero:
 #
 #   CMakeLists.txt
+#   Quake/bgmusic.c
+#   Quake/bgmusic.h
+#   Quake/cl_parse.c
 #   Quake/cvar.c
 #   Quake/cvar.h
 #   Quake/gl_screen.c
 #   Quake/main_sdl.c
+#   Quake/pr_edict.c
 #   Quake/sbar.c
+#   Quake/server.h
+#   Quake/sv_main.c
 #   Quake/view.c
 #
 # Son tres cosas, mas un cuarto punto:
@@ -31,7 +37,7 @@
 #   * El parche se genera contra el ORIGINAL, no contra el arbol ya parcheado.
 #     Si no, el diff incluye los cambios del parche anterior dos veces.
 --- a/CMakeLists.txt	origen
-+++ b/CMakeLists.txt	2026-10-03 17:16:39.000000000 +0000
++++ b/CMakeLists.txt	2026-10-03 18:15:04.000000000 +0000
 @@ -61,7 +61,39 @@
  endif()
  
@@ -73,8 +79,361 @@
  	target_link_libraries(ironwail PRIVATE m)
  	set(ENABLE_USERDIRS TRUE CACHE STRING "Enable user directories")
  elseif (WIN32)
+--- a/Quake/bgmusic.c	origen
++++ b/Quake/bgmusic.c	2026-10-03 18:15:04.000000000 +0000
+@@ -145,6 +145,7 @@
+ 
+ 	Cvar_RegisterVariable(&bgm_extmusic);
+ 	Cmd_AddCommand("music", BGM_Play_f);
++	Cmd_AddCommand("bgm_catalogo", BGM_CatalogoListar);
+ 	Cmd_AddCommand("music_pause", BGM_Pause_f);
+ 	Cmd_AddCommand("music_resume", BGM_Resume_f);
+ 	Cmd_AddCommand("music_loop", BGM_Loop_f);
+@@ -293,6 +294,302 @@
+ 	Con_Printf("Couldn't handle music file %s\n", filename);
+ }
+ 
++/*
++================================================================================
++CATALOGO DE MUSICA
++================================================================================
++Por que existe
++
++La musica se pedia por un numero: la clave "sounds" del worldspawn, un entero de
++2 a 255, y el motor montaba "music/track%02d.ogg". El numero no dice nada: no se
++sabe que pista es cual hasta que se abre el fichero, y no se puede elegir una
++pista que no siga el patron trackNN. Luego el orden era el del numero, que es un
++orden arbitrario.
++
++Aqui la musica se pide por NOMBRE:
++
++    {
++    "classname" "worldspawn"
++    "music" "bosque.ogg"
++    }
++
++Y el motor la busca en music/. Da igual donde este el fichero y da igual como se
++llame: track02, bosque o nivel1_marcha.
++
++Como se mantiene lo viejo
++
++Los mapas de siempre (los de LibreQuake y los nuestros) siguen poniendo "sounds"
++con un numero y eso sigue funcionando igual, byte a byte. No se cambia ni una
++linea de su camino.
++
++Para que las dos cosas convivan sin ambiguedad, el servidor manda DOS bytes (ya
++los mandaba) y el segundo es el que dice cual de las dos es:
++
++    looptrack 255   el byte de la pista es un indice del catalogo (por nombre)
++    otra cosa       el byte de la pista es un numero de track, como siempre
++
++Los indices empiezan en 1. El 0 se queda significando "ninguna", que es lo que ya
++significaba.
++
++De donde sale la lista
++
++Se recorre la lista de rutas de busqueda del motor, no un directorio suelto: el
++juego puede arrancar con -basedir datos y la musica estar en datos/music/, no en
++music/. Asi el mismo codigo vale vaya el juego donde vaya.
++
++Solo se ven los ficheros sueltos de los directorios. Si alguien mete musica
++dentro de un PAK, la clave "music" no lo encontrara y seguira mandando la
++pista por numero, que es lo de siempre. La musica de Direkt va suelta, asi que
++eso no pasa.
++
++Orden
++
++El orden en el que un sistema devuelve un directorio no esta garantizado. Si el
++indice dependiera de ahi, el numero que manda el servidor no significaria lo
++mismo en el cliente. Por eso la lista se ordena por nombre antes de numerar:
++siempre el mismo indice para el mismo fichero, en cualquier maquina.
++================================================================================
++*/
++
++#define BGM_CATALOGO_MAX 512
++
++// nombre = ruta relativa ("music/x.ogg"), tal cual se le pasa al buscador del
++// motor, que la resuelve por las rutas de busqueda igual que cualquier otra.
++static struct {
++	char	nombre[MAX_QPATH];
++} bgm_catalogo[BGM_CATALOGO_MAX];
++
++static int bgm_catalogo_n = -1;		// -1 = sin hacer todavia
++
++// Las extensiones que se buscan, en el orden de preferencia del motor. Primero
++// la del fichero, luego el resto: si hay un bosque.ogg y un bosque.mp3, gana el
++// .ogg, que es lo que haria el numero.
++static const char *const bgm_catalogo_exts[] = {
++	".ogg", ".opus", ".mp3", ".flac", ".wav", NULL
++};
++
++// Por Extension y luego por nombre entero, para que la lista sea siempre la
++// misma y el indice signifique lo mismo.
++static int BGM_CatalogoCompara (const void *a, const void *b)
++{
++	return strcmp (*(const char **)a, *(const char **)b);
++}
++
++// Solo el nombre del fichero, sin la carpeta, para comparar y para no contar dos
++// veces el mismo fichero si aparece en mas de una ruta de busqueda.
++static const char *BGM_CatalogoSoloNombre (const char *ruta)
++{
++	const char *p = strrchr (ruta, '/');
++	return p ? p + 1 : ruta;
++}
++
++/*
++================================================================================
++BGM_CatalogoConstruir
++================================================================================
++*/
++void BGM_CatalogoConstruir (void)
++{
++	static char *nombres[BGM_CATALOGO_MAX];
++	searchpath_t	*s;
++	int total = 0, guardados = 0, i, k, por_tirar;
++
++	for (s = com_searchpaths; s && total < BGM_CATALOGO_MAX; s = s->next)
++	{
++		// Los PAK no se pueden recorrer como un directorio; se saltan.
++		if (s->pack || !s->filename[0])
++			continue;
++
++		for (i = 0; bgm_catalogo_exts[i] && total < BGM_CATALOGO_MAX; i++)
++		{
++			findfile_t *find;
++			char ruta[MAX_OSPATH];
++
++			snprintf (ruta, sizeof (ruta), "%s/%s", s->filename, MUSIC_DIRNAME);
++			if (!(find = Sys_FindFirst (ruta, bgm_catalogo_exts[i] + 1)))
++				continue;
++
++			// El ultimo Sys_FindNext cierra el directorio por su cuenta, asi que
++			// solo hay que cerrarlo aqui si se sale antes de tiempo. Cerrarlo dos
++			// veces revienta el motor.
++			por_tirar = 0;
++			do
++			{
++				if (find->attribs & FA_DIRECTORY)
++					continue;
++				if (total >= BGM_CATALOGO_MAX)
++				{
++					por_tirar = 1;
++					break;
++				}
++				nombres[total++] = Z_Malloc (MAX_QPATH);
++				snprintf (nombres[total-1], MAX_QPATH, "%s/%s",
++						MUSIC_DIRNAME, find->name);
++			}
++			while (Sys_FindNext (find));
++
++			if (por_tirar)
++				Sys_FindClose (find);
++		}
++	}
++
++	qsort (nombres, total, sizeof(char *), BGM_CatalogoCompara);
++
++	for (i = 0; i < total; i++)
++	{
++		const char *este = BGM_CatalogoSoloNombre (nombres[i]);
++
++		// El mismo nombre puede estar en varias rutas. Se queda la primera, que
++		// es la de mas prioridad, la misma que usaria el motor al abrirlo.
++		for (k = 0; k < guardados; k++)
++			if (!strcmp (BGM_CatalogoSoloNombre (bgm_catalogo[k].nombre), este))
++				break;
++		if (k < guardados)
++		{
++			Z_Free (nombres[i]);
++			continue;
++		}
++
++		q_strlcpy (bgm_catalogo[guardados].nombre, nombres[i], MAX_QPATH);
++		guardados++;
++		Z_Free (nombres[i]);
++	}
++
++	bgm_catalogo_n = guardados;
++}
++
++/*
++================================================================================
++BGM_CatalogoIndice
++================================================================================
++Devuelve el indice (empezando por 1) del fichero pedido, o 0 si no esta.
++Acepta el nombre con o sin la carpeta delante, y con o sin la extension.
++================================================================================
++*/
++int BGM_CatalogoIndice (const char *pedido)
++{
++	char limpio[MAX_QPATH];
++	const char *p;
++	size_t largo;
++	int i;
++
++	if (!pedido || !pedido[0])
++		return 0;
++	if (bgm_catalogo_n < 0)
++		BGM_CatalogoConstruir();
++	if (bgm_catalogo_n <= 0)
++		return 0;
++
++	// Quitar la carpeta: "music/bosque.ogg" y "bosque.ogg" son la misma.
++	p = strrchr (pedido, '/');
++	q_strlcpy (limpio, p ? p + 1 : pedido, sizeof(limpio));
++
++	for (i = 0; i < bgm_catalogo_n; i++)
++		if (!q_strcasecmp (BGM_CatalogoSoloNombre (bgm_catalogo[i].nombre), limpio))
++			return i + 1;
++
++	// Sin extension: se busca la primera que encaje con ese nombre. Asi un mapa
++	// puede poner "bosque" y sonar la pista que haya, sea .ogg o .mp3.
++	p = strrchr (limpio, '.');
++	if (!p)
++	{
++		largo = strlen (limpio);
++		for (i = 0; i < bgm_catalogo_n; i++)
++		{
++			const char *ext = strrchr (bgm_catalogo[i].nombre, '.');
++			if (!ext || (size_t)(ext - bgm_catalogo[i].nombre) != largo)
++				continue;
++			if (!q_strncasecmp (BGM_CatalogoSoloNombre (bgm_catalogo[i].nombre),
++						limpio, largo))
++				return i + 1;
++		}
++	}
++
++	return 0;
++}
++
++/*
++================================================================================
++BGM_CatalogoFichero
++================================================================================
++Devuelve la ruta relativa ("music/x.ogg") del indice, o NULL.
++================================================================================
++*/
++const char *BGM_CatalogoFichero (int indice)
++{
++	static char completo[MAX_QPATH];
++
++	if (indice < 1 || bgm_catalogo_n < 0 || indice > bgm_catalogo_n)
++		return NULL;
++	q_snprintf (completo, sizeof(completo), "%s", bgm_catalogo[indice - 1].nombre);
++	return completo;
++}
++
++/*
++================================================================================
++BGM_PlayCDtrackIndex
++================================================================================
++Reproduce la pista del catalogo que dice el indice. Lo usa el camino nuevo, el
++del worldspawn con clave "music".
++================================================================================
++*/
++void BGM_PlayCDtrackIndex (int indice, qboolean looping)
++{
++	const char *fichero = BGM_CatalogoFichero (indice);
++
++	if (!fichero)
++	{
++		Con_Printf ("La musica del mapa (indice %d) no esta en %s/\n",
++				indice, MUSIC_DIRNAME);
++		return;
++	}
++
++	// Igual que BGM_PlayCDtrack: si ya suena esta misma, solo se reanuda en vez
++	// de parar y empezar otra vez.
++	if (bgmstream && !strcmp (bgmstream->name, fichero))
++	{
++		BGM_Resume ();
++		return;
++	}
++
++	BGM_Stop();
++
++	// S_CodecOpenStreamAny deja que sea el detector de extensiones el que mire el
++	// final del fichero, que es lo que se quiere: el mapa dice "bosque.ogg" y
++	// suena esa, sin importar el resto.
++	bgmstream = S_CodecOpenStreamAny (fichero, looping);
++	if (!bgmstream)
++		Con_Printf ("No se pudo abrir la musica %s\n", fichero);
++	else
++		Con_Printf ("Musica del mapa: %s\n", fichero);
++}
++
++/*
++================================================================================
++BGM_CatalogoListar
++================================================================================
++El comando "bgm_catalogo" escribe la lista de pistas con su indice. Es lo que hay
++que mirar para saber que nombre poner en la clave "music" de un mapa.
++================================================================================
++*/
++void BGM_CatalogoListar (void)
++{
++	int	i;
++
++	if (bgm_catalogo_n < 0)
++		BGM_CatalogoConstruir();
++
++	if (bgm_catalogo_n <= 0)
++	{
++		Con_Printf ("No hay musica en %s/\n", MUSIC_DIRNAME);
++		return;
++	}
++
++	Con_Printf ("%d pistas en %s/:\n", bgm_catalogo_n, MUSIC_DIRNAME);
++	for (i = 0; i < bgm_catalogo_n; i++)
++		Con_Printf ("  %3d  %s\n", i + 1, bgm_catalogo[i].nombre);
++}
++
+ void BGM_PlayCDtrack (byte track, qboolean looping)
+ {
+ /* instead of searching by the order of music_handlers, do so by
+--- a/Quake/bgmusic.h	origen
++++ b/Quake/bgmusic.h	2026-10-03 18:15:04.000000000 +0000
+@@ -39,5 +39,21 @@
+ 
+ void BGM_PlayCDtrack (byte track, qboolean looping);
+ 
++/*
++================================================================================
++Catalogo de musica (ver el comentario largo en bgmusic.c)
++================================================================================
++*/
++
++// La marca que viaja en el segundo byte de svc_cdtrack para decir que el
++// primero es un indice del catalogo y no un numero de track.
++#define BGM_INDICE_MARCADOR	255
++
++void BGM_CatalogoConstruir (void);
++void BGM_CatalogoListar (void);
++int  BGM_CatalogoIndice (const char *pedido);
++const char *BGM_CatalogoFichero (int indice);
++void BGM_PlayCDtrackIndex (int indice, qboolean looping);
++
+ #endif	/* _BGMUSIC_H_ */
+ 
+--- a/Quake/cl_parse.c	origen
++++ b/Quake/cl_parse.c	2026-10-03 18:15:04.000000000 +0000
+@@ -1302,7 +1302,12 @@
+ 		case svc_cdtrack:
+ 			cl.cdtrack = MSG_ReadByte ();
+ 			cl.looptrack = MSG_ReadByte ();
+-			if ( (cls.demoplayback || cls.demorecording) && (cls.forcetrack != -1) )
++			// Direkt: si el segundo byte lleva la marca, el primero es un indice
++			// del catalogo de musica y se busca por nombre. Sin marca es el
++			// numero de track de toda la vida. Ver el comentario en bgmusic.c.
++			if (cl.looptrack == BGM_INDICE_MARCADOR)
++				BGM_PlayCDtrackIndex ((int)cl.cdtrack, true);
++			else if ( (cls.demoplayback || cls.demorecording) && (cls.forcetrack != -1) )
+ 				BGM_PlayCDtrack ((byte)cls.forcetrack, true);
+ 			else
+ 				BGM_PlayCDtrack ((byte)cl.cdtrack, true);
 --- a/Quake/cvar.c	origen
-+++ b/Quake/cvar.c	2026-10-03 17:16:39.000000000 +0000
++++ b/Quake/cvar.c	2026-10-03 18:15:04.000000000 +0000
 @@ -272,6 +272,29 @@
  ============
  */
@@ -116,7 +475,7 @@
  
  //==============================================================================
 --- a/Quake/cvar.h	origen
-+++ b/Quake/cvar.h	2026-10-03 17:16:39.000000000 +0000
++++ b/Quake/cvar.h	2026-10-03 18:15:04.000000000 +0000
 @@ -41,6 +41,8 @@
  init function before any console commands are executed:
  
@@ -127,7 +486,7 @@
  
  C code usually just references a cvar in place:
 --- a/Quake/gl_screen.c	origen
-+++ b/Quake/gl_screen.c	2026-10-03 17:16:39.000000000 +0000
++++ b/Quake/gl_screen.c	2026-10-03 18:15:04.000000000 +0000
 @@ -486,6 +486,8 @@
  Internal use only
  =================
@@ -154,7 +513,7 @@
  	else if (size >= 110)
  		sb_lines = 24 * scale;
 --- a/Quake/main_sdl.c	origen
-+++ b/Quake/main_sdl.c	2026-10-03 17:16:39.000000000 +0000
++++ b/Quake/main_sdl.c	2026-10-03 18:15:04.000000000 +0000
 @@ -120,7 +120,16 @@
  
  // On OS X we call SDL_main from the launcher, but SDL2 doesn't redefine main
@@ -173,8 +532,32 @@
  #define main SDL_main
  #endif
  
+--- a/Quake/pr_edict.c	origen
++++ b/Quake/pr_edict.c	2026-10-03 18:15:04.000000000 +0000
+@@ -1387,6 +1387,21 @@
+ 		if (keyname[0] == '_')
+ 			continue;
+ 
++		// Direkt: la musica del mapa, por nombre. Se lee aqui y no como un campo
++		// del QC porque "music" no existe en defs.qc, y anadirlo ahi moveria todos
++		// los campos siguientes y el motor se negaria a cargar el progs.dat
++		// ("progdefs.h is out of date"). Es el mismo truco que el de "alpha" de
++		// dos lineas mas abajo.
++		if (ent == qcvm->edicts && !strcmp(keyname, "music"))
++		{
++			// A NULL no se le suelta: Z_Free avisa y para el motor.
++			if (sv_musicname)
++				Z_Free (sv_musicname);
++			sv_musicname = Z_Malloc (strlen (com_token) + 1);
++			q_strlcpy (sv_musicname, com_token, strlen (com_token) + 1);
++			continue;
++		}
++
+ 		//johnfitz -- hack to support .alpha even when progs.dat doesn't know about it
+ 		if (!strcmp(keyname, "alpha"))
+ 			ent->alpha = ENTALPHA_ENCODE(Q_atof(com_token));
 --- a/Quake/sbar.c	origen
-+++ b/Quake/sbar.c	2026-10-03 17:16:39.000000000 +0000
++++ b/Quake/sbar.c	2026-10-03 18:15:04.000000000 +0000
 @@ -1605,6 +1605,56 @@
  Sbar_Draw
  ===============
@@ -247,8 +630,71 @@
  	if (scr_con_current == vid.height)
  		return;		// console is full screen
  
+--- a/Quake/server.h	origen
++++ b/Quake/server.h	2026-10-03 18:15:04.000000000 +0000
+@@ -307,4 +307,9 @@
+ void SV_SaveSpawnparms (void);
+ void SV_SpawnServer (const char *server);
+ 
++// Direkt: nombre del fichero de musica del mapa, leido de la clave "music"
++// del worldspawn. NULL si el mapa no la pone (y entonces se usa el numero
++// viejo de la clave "sounds"). Ver el comentario en bgmusic.c.
++extern char *sv_musicname;
++
+ #endif	/* QUAKE_SERVER_H */
+--- a/Quake/sv_main.c	origen
++++ b/Quake/sv_main.c	2026-10-03 18:15:04.000000000 +0000
+@@ -23,10 +23,15 @@
+ // sv_main.c -- server main program
+ 
+ #include "quakedef.h"
++#include "bgmusic.h"
+ 
+ server_t	sv;
+ server_static_t	svs;
+ 
++// Direkt: el nombre del fichero de musica que pide el mapa, leido de la clave
++// "music" del worldspawn (ver pr_edict.c y bgmusic.c).
++char *sv_musicname = NULL;
++
+ static char	localmodels[MAX_MODELS][8];	// inline model names for precache
+ 
+ int		sv_protocol = PROTOCOL_RMQ; //johnfitz
+@@ -441,9 +446,29 @@
+ 	//johnfitz
+ 
+ // send music
+-	MSG_WriteByte (&client->message, svc_cdtrack);
+-	MSG_WriteByte (&client->message, qcvm->edicts->v.sounds);
+-	MSG_WriteByte (&client->message, qcvm->edicts->v.sounds);
++	// Direkt: la musica. Si el mapa pone la clave "music", lo que viaja es el
++	// indice de ese fichero en el catalogo, y el segundo byte lleva la marca que
++	// lo dice. Si no la pone, sigue yendo el numero de siempre y el segundo byte
++	// va sin marcar: los mapas viejos no cambian ni un bit de su camino.
++	{
++		int indice = sv_musicname ? BGM_CatalogoIndice (sv_musicname) : 0;
++
++		if (indice > 0)
++		{
++			MSG_WriteByte (&client->message, svc_cdtrack);
++			MSG_WriteByte (&client->message, indice);
++			MSG_WriteByte (&client->message, BGM_INDICE_MARCADOR);
++		}
++		else
++		{
++			if (sv_musicname)
++				Con_Printf ("El mapa pide la musica \"%s\" y no esta en %s/\n",
++						sv_musicname, "music");
++			MSG_WriteByte (&client->message, svc_cdtrack);
++			MSG_WriteByte (&client->message, qcvm->edicts->v.sounds);
++			MSG_WriteByte (&client->message, qcvm->edicts->v.sounds);
++		}
++	}
+ 
+ // set view
+ 	MSG_WriteByte (&client->message, svc_setview);
 --- a/Quake/view.c	origen
-+++ b/Quake/view.c	2026-10-03 17:16:39.000000000 +0000
++++ b/Quake/view.c	2026-10-03 18:15:04.000000000 +0000
 @@ -714,6 +714,7 @@
  	side = V_CalcRoll (cl_entities[cl.viewentity].angles, cl.velocity);
  	r_refdef.viewangles[ROLL] += side;

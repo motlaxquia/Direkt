@@ -417,6 +417,83 @@ if ((probados > 0 && conefecto * 4 < probados)); then
   echo "        probados: $probados, con efecto: $conefecto" >&2
 fi
 
+head_ "8. La musica se pide por nombre"
+
+# La musica se puede pedir de dos maneras y las dos tienen que funcionar:
+#
+#   "music" "pista.ogg"   Direkt. Busca ese fichero en music/ por su nombre.
+#   "sounds" "5"          de toda la vida. El 5 es un numero de pista.
+#
+# Aqui se prueban las dos, y tambien el fallo honesto: si el mapa pide una pista
+# que no existe, el motor lo dice y no se queda mudo sin avisar.
+MUSICA_MAP="musica"
+MUSICA_NUMERO_MAP="musica-numero"
+MUSICA_FALTA_MAP="musica-falta"
+
+for _m in "$MUSICA_MAP" "$MUSICA_NUMERO_MAP" "$MUSICA_FALTA_MAP"; do
+  if "$BUILD/bin/direkt-bsp" "$REPO_ROOT/src/test/$_m.map" \
+       "$BUILD/datos/id1/maps/$_m.bsp" >"$BUILD/bsp-$_m.out" 2>&1; then
+    ok "el mapa $_m compila"
+  else
+    ko "el mapa $_m no compila"
+    tail -5 "$BUILD/bsp-$_m.out" >&2
+  fi
+done
+
+# El comando bgm_catalogo dice que pistas hay y en que numero. Si no lista
+# ninguna, la clave "music" no puede funcionar.
+if "$REPO_ROOT/scripts/run-headless.sh" --map "$MUSICA_MAP" --settle 4 \
+     --min-lit 0 --cfg-line 'bgm_catalogo' >"$BUILD/musica-catalogo.out" 2>&1; then
+  _lineas="$(grep -cE '^ +[0-9]+ +music/' "$LOGS/run-$MUSICA_MAP.log" || true)"
+  if ((_lineas > 0)); then
+    ok "bgm_catalogo lista las pistas ($_lineas)"
+  else
+    ko "bgm_catalogo no lista ninguna pista"
+    echo "        log: $LOGS/run-$MUSICA_MAP.log" >&2
+  fi
+
+  # El mapa pide track05.ogg. El motor tiene que acabar intentar abrir ese
+  # fichero concreto, no "music/trackNN" inventado ni el numero.
+  if grep -q "music/track05.ogg" "$LOGS/run-$MUSICA_MAP.log"; then
+    ok "el mundospawn \"music\" se resuelve al fichero pedido"
+  else
+    ko "el mundospawn \"music\" no llega al fichero pedido"
+    grep -iE "musica|track" "$LOGS/run-$MUSICA_MAP.log" | head -5 >&2
+  fi
+else
+  ko "el motor no arranco con bgm_catalogo"
+  tail -10 "$BUILD/musica-catalogo.out" >&2
+fi
+
+# El numero viejo: el mapa con "sounds" no debe entrar por el camino nuevo ni
+# quejarse. Que no avise es la prueba.
+if "$REPO_ROOT/scripts/run-headless.sh" --map "$MUSICA_NUMERO_MAP" --settle 4 \
+     --min-lit 0 >"$BUILD/musica-numero.out" 2>&1; then
+  if ! grep -qiE "no esta en music|Musica del mapa" "$LOGS/run-$MUSICA_NUMERO_MAP.log"; then
+    ok "\"sounds\" sigue funcionando por su cuenta"
+  else
+    ko "\"sounds\" se ha colado en el camino de la musica por nombre"
+  fi
+else
+  ko "el motor no arranco con el mapa de musica por numero"
+  tail -10 "$BUILD/musica-numero.out" >&2
+fi
+
+# Pista que no existe: el motor lo dice y ademas sigue por el numero, con lo
+# cual el mapa no se queda mudo.
+if "$REPO_ROOT/scripts/run-headless.sh" --map "$MUSICA_FALTA_MAP" --settle 4 \
+     --min-lit 0 >"$BUILD/musica-falta.out" 2>&1; then
+  if grep -q "no-existe.ogg" "$LOGS/run-$MUSICA_FALTA_MAP.log"; then
+    ok "una pista inexistente se avisa en vez de callarse"
+  else
+    ko "una pista inexistente no avisa nada"
+    grep -iE "musica|track" "$LOGS/run-$MUSICA_FALTA_MAP.log" | head -5 >&2
+  fi
+else
+  ko "el motor no arranco con el mapa de musica inexistente"
+  tail -10 "$BUILD/musica-falta.out" >&2
+fi
+
 head_ "Resultado"
 printf '  %d pasan, %d fallan\n\n' "$pass" "$fail"
 ((fail == 0)) || exit 1

@@ -1,0 +1,30 @@
+// Caja solida de 64 unidades con la musica pedida por numero, la forma de
+// toda la vida. La clave "sounds" del worldspawn lleva un entero y el motor
+// monta "music/trackNN.ogg" a partir de el.
+//
+// Este mapa no puede usar la forma por nombre a proposito: comprueba que lo
+// viejo sigue yendo por su camino y sin entrar en el camino de la musica por nombre.
+
+{
+"classname" "worldspawn"
+"wad" "gfx.wad"
+"sounds" "5"
+{
+( 64 0 0 )( 64 64 0 )( 64 64 64 )( 64 0 64 ) wall1
+( 0 0 0 )( 0 0 64 )( 0 64 64 )( 0 64 0 ) wall1
+( 0 64 0 )( 0 64 64 )( 64 64 64 )( 64 64 0 ) wall1
+( 0 0 0 )( 64 0 0 )( 64 0 64 )( 0 0 64 ) wall1
+( 0 0 64 )( 64 0 64 )( 64 64 64 )( 64 0 64 ) wall1
+( 0 0 0 )( 0 64 0 )( 64 64 0 )( 64 0 0 ) wall1
+}
+}
+{
+"classname" "info_player_start"
+"origin" "-224 -224 -32"
+"angle" "90"
+}
+{
+"classname" "light"
+"origin" "32 32 96"
+"light" "300"
+}
