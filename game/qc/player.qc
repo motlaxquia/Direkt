@@ -31,6 +31,9 @@ void()	direkt_test_muerte;
 void(entity victima)	direkt_gibs;
 void()	direkt_gib_quita;
 void()	direkt_jugador_reintentar;
+void()	direkt_teclas;
+void()	direkt_avisa_teclas;
+void()	direkt_avisa_piso;
 // Impulso extra por frame mientras se mantiene el salto subiendo. Con 16 el salto
 // queda claramente mas alto; con 40 el motor se atasca.
 #define DIREKT_SALTO_EXTRA 16
@@ -170,6 +173,12 @@ void() direkt_prethink_jugador =
 	// al jugador, asi que el agachado va aqui y no en el postthink.
 	direkt_agacha();
 
+	// Las teclas del parkour llegan como impulso, y el impulso se vacia en
+	// cuanto se mira, asi que se leen primero de todo.
+	direkt_teclas();
+	direkt_avisa_teclas();
+	direkt_avisa_piso();
+
 	// Si esta muerto no se hace nada hasta que le toque reaparecer.
 	if (self.deadflag)
 		return;
@@ -218,7 +227,7 @@ void() direkt_prethink_jugador =
 	{
 		self.impulse = 0;
 		direkt_test_suelo_paso = 0;
-		direkt_test_suelo_z0 = self.origin[2];
+		direkt_test_suelo_z0 = self.origin_z;
 		self.think = direkt_test_suelo;
 		self.nextthink = time + 0.5;
 	}
@@ -1002,16 +1011,18 @@ void() direkt_test_suelo =
 		return;
 	}
 
-	direkt_test_suelo_dz = self.origin[2] - direkt_test_suelo_z0;
-	if (direkt_test_suelo_dz > 4)
+	direkt_test_suelo_dz = self.origin_z - direkt_test_suelo_z0;
+	if (direkt_piso())
+		localcmd(" echo DIREKT: el jugador esta apoyado en el suelo");
+	else if (direkt_test_suelo_dz > 4)
 		localcmd(" echo DIREKT: el jugador esta en el aire, cayendo");
 	else if (direkt_test_suelo_dz < -4)
 		localcmd(" echo DIREKT: el jugador esta subiendo");
 	else
-		localcmd(" echo DIREKT: el jugador esta apoyado en el suelo");
+		localcmd(" echo DIREKT: el jugador esta en el aire");
 
 	// dprint va a la consola del motor, que es justo donde se mira el log.
-	direkt_test_suelo_z = self.origin[2];
+	direkt_test_suelo_z = self.origin_z;
 	dprint("DIREKT: altura z = ");
 	dprint(ftos(direkt_test_suelo_z));
 	dprint("\n");

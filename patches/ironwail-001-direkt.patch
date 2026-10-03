@@ -8,10 +8,13 @@
 #   CMakeLists.txt
 #   Quake/bgmusic.c
 #   Quake/bgmusic.h
+#   Quake/cl_input.c
 #   Quake/cl_parse.c
 #   Quake/cvar.c
 #   Quake/cvar.h
 #   Quake/gl_screen.c
+#   Quake/keys.c
+#   Quake/keys.h
 #   Quake/main_sdl.c
 #   Quake/pr_edict.c
 #   Quake/sbar.c
@@ -37,7 +40,7 @@
 #   * El parche se genera contra el ORIGINAL, no contra el arbol ya parcheado.
 #     Si no, el diff incluye los cambios del parche anterior dos veces.
 --- a/CMakeLists.txt	origen
-+++ b/CMakeLists.txt	2026-10-03 18:54:23.000000000 +0000
++++ b/CMakeLists.txt	2026-10-03 19:50:10.000000000 +0000
 @@ -61,7 +61,39 @@
  endif()
  
@@ -80,7 +83,7 @@
  	set(ENABLE_USERDIRS TRUE CACHE STRING "Enable user directories")
  elseif (WIN32)
 --- a/Quake/bgmusic.c	origen
-+++ b/Quake/bgmusic.c	2026-10-03 18:54:23.000000000 +0000
++++ b/Quake/bgmusic.c	2026-10-03 19:50:10.000000000 +0000
 @@ -27,7 +27,6 @@
  #include "snd_codeci.h"
  #include "bgmusic.h"
@@ -596,7 +599,7 @@
  	{
  		q_snprintf(tmp, sizeof(tmp), "%s/track%02d.%s",
 --- a/Quake/bgmusic.h	origen
-+++ b/Quake/bgmusic.h	2026-10-03 18:54:23.000000000 +0000
++++ b/Quake/bgmusic.h	2026-10-03 19:50:10.000000000 +0000
 @@ -39,5 +39,28 @@
  
  void BGM_PlayCDtrack (byte track, qboolean looping);
@@ -626,8 +629,37 @@
 +
  #endif	/* _BGMUSIC_H_ */
  
+--- a/Quake/cl_input.c	origen
++++ b/Quake/cl_input.c	2026-10-03 19:50:10.000000000 +0000
+@@ -60,6 +60,11 @@
+ 
+ int			in_impulse;
+ 
++// Direkt: reparto de teclas que el juego necesita ver, como pares "tecla=numero".
++// Se cambia en consola con  set cl_teclas_juego "SHIFT=27 CTRL=28"
++// Ver el comentario de Key_ImpulsoTeclas en keys.c.
++static cvar_t	cl_teclas_juego = {"cl_teclas_juego", "SHIFT=27 CTRL=28", CVAR_NONE};
++
+ 
+ void KeyDown (kbutton_t *b)
+ {
+@@ -431,7 +436,13 @@
+ 
+ 		MSG_WriteByte (&buf, bits);
+ 
+-		MSG_WriteByte (&buf, in_impulse);
++		// Direkt: teclas que el juego necesita ver (parkour). Van como impulso, que
++	// es lo unico que el cliente manda de forma fiable. Solo si el jugador no ha
++	// pedido ya un impulso con "+impulse", para no pisar lo suyo.
++	if (!in_impulse)
++		in_impulse = Key_ImpulsoTeclas (cl_teclas_juego.string);
++
++	MSG_WriteByte (&buf, in_impulse);
+ 		in_impulse = 0;
+ 	}
+ 
 --- a/Quake/cl_parse.c	origen
-+++ b/Quake/cl_parse.c	2026-10-03 18:54:23.000000000 +0000
++++ b/Quake/cl_parse.c	2026-10-03 19:50:10.000000000 +0000
 @@ -1302,7 +1302,12 @@
  		case svc_cdtrack:
  			cl.cdtrack = MSG_ReadByte ();
@@ -643,7 +675,7 @@
  			else
  				BGM_PlayCDtrack ((byte)cl.cdtrack, true);
 --- a/Quake/cvar.c	origen
-+++ b/Quake/cvar.c	2026-10-03 18:54:23.000000000 +0000
++++ b/Quake/cvar.c	2026-10-03 19:50:10.000000000 +0000
 @@ -272,6 +272,29 @@
  ============
  */
@@ -685,7 +717,7 @@
  
  //==============================================================================
 --- a/Quake/cvar.h	origen
-+++ b/Quake/cvar.h	2026-10-03 18:54:23.000000000 +0000
++++ b/Quake/cvar.h	2026-10-03 19:50:10.000000000 +0000
 @@ -41,6 +41,8 @@
  init function before any console commands are executed:
  
@@ -696,7 +728,7 @@
  
  C code usually just references a cvar in place:
 --- a/Quake/gl_screen.c	origen
-+++ b/Quake/gl_screen.c	2026-10-03 18:54:23.000000000 +0000
++++ b/Quake/gl_screen.c	2026-10-03 19:50:10.000000000 +0000
 @@ -486,6 +486,8 @@
  Internal use only
  =================
@@ -722,8 +754,113 @@
  		sb_lines = 0;
  	else if (size >= 110)
  		sb_lines = 24 * scale;
+--- a/Quake/keys.c	origen
++++ b/Quake/keys.c	2026-10-03 19:50:10.000000000 +0000
+@@ -653,6 +653,87 @@
+ 
+ 
+ /*
++================================================================================
++DIREKT: teclas que el juego necesita ver
++================================================================================
++El juego no recibe las teclas, solo recibe lo que el jugador hace con ellas:
++mover, disparar, usar, saltar y un impulso. Las demas teclas no llegan.
++
++Eso basta para casi todo, pero el parkour necesita saber si se mantiene una
++tecla modificadora: Shift para el dash y el planeo, Ctrl para deslizarse. Y no
++hay forma de saberlo desde ahi, porque "+speed" solo multiplica el movimiento en
++este lado de la linea y no manda ningun bit al servidor.
++
++La salida es el impulso, que es lo unico que el cliente manda de forma fiable y
++que el juego ya usa para todo lo demas (agacharse, reintentar, las pruebas).
++Enquanto se mantenga la tecla, el impulso se repite cada frame, que es como se
++usa desde el juego: como nivel, no como flanco.
++
++El reparto se cambia con el cvar cl_teclas_juego, con pares "tecla=numero" y sin
++importar mayusculas:
++
++    set cl_teclas_juego "SHIFT=27 CTRL=28"
++
++Un numero por clave y uno solo por frame: si se pulsan dos a la vez, gana la
++primera de la lista. Es lo justo para las teclas modificadoras del parkour, que
++se usan de una en una.
++================================================================================
++*/
++int Key_ImpulsoTeclas (const char *especificacion)
++{
++	const char	*p;
++	char		tecla[32];
++	int			longitud;
++	if (!especificacion || !especificacion[0])
++		return 0;
++
++	p = especificacion;
++	while (*p)
++	{
++		int		numero;
++		int		keynum;
++
++		// El nombre de la tecla va hasta el '='.
++		longitud = 0;
++		while (*p && *p != '=' && *p != ' ' && *p != '\t')
++		{
++			if (longitud < (int)sizeof (tecla) - 1)
++				tecla[longitud++] = *p;
++			p++;
++		}
++		tecla[longitud] = 0;
++
++		if (!*p || *p == ' ' || *p == '\t')
++		{
++			// Un nombre suelto no dice nada: el numero va detras del '='.
++			while (*p == ' ' || *p == '\t')
++				p++;
++			continue;
++		}
++
++		p++;		// salta el '='
++		numero = 0;
++		while (*p >= '0' && *p <= '9')
++			numero = numero * 10 + (*p++ - '0');
++
++		while (*p == ' ' || *p == '\t')
++			p++;
++
++		keynum = Key_StringToKeynum (tecla);
++		if (keynum < 0 || keynum >= MAX_KEYS)
++			continue;
++		if (!keydown[keynum])
++			continue;
++		if (numero < 0 || numero > 255)
++			continue;
++
++		return numero;
++	}
++
++	return 0;
++}
++
++/*
+ ===================
+ Key_StringToKeynum
+ 
+--- a/Quake/keys.h	origen
++++ b/Quake/keys.h	2026-10-03 19:50:10.000000000 +0000
+@@ -236,7 +236,12 @@
+ int Key_GetKeysForCommand (const char *command, int *keys, int maxkeys, keydevicemask_t devmask);
+ qboolean Key_IsKeyGamepadAltModifier (int keynum);
+ qboolean Key_GetGamepadAltModifierState (void);
++int Key_StringToKeynum (const char *str);
+ const char *Key_KeynumToString (int keynum);
++
++// Direkt: devuelve el numero del primer par "tecla=numero" cuya tecla este
++// pulsada, o 0. Ver el comentario en keys.c.
++int Key_ImpulsoTeclas (const char *especificacion);
+ const char *Key_KeynumToFriendlyString (int keynum);
+ void Key_WriteBindings (FILE *f);
+ 
 --- a/Quake/main_sdl.c	origen
-+++ b/Quake/main_sdl.c	2026-10-03 18:54:23.000000000 +0000
++++ b/Quake/main_sdl.c	2026-10-03 19:50:10.000000000 +0000
 @@ -120,7 +120,16 @@
  
  // On OS X we call SDL_main from the launcher, but SDL2 doesn't redefine main
@@ -743,7 +880,7 @@
  #endif
  
 --- a/Quake/pr_edict.c	origen
-+++ b/Quake/pr_edict.c	2026-10-03 18:54:23.000000000 +0000
++++ b/Quake/pr_edict.c	2026-10-03 19:50:10.000000000 +0000
 @@ -1387,6 +1387,21 @@
  		if (keyname[0] == '_')
  			continue;
@@ -767,7 +904,7 @@
  		if (!strcmp(keyname, "alpha"))
  			ent->alpha = ENTALPHA_ENCODE(Q_atof(com_token));
 --- a/Quake/sbar.c	origen
-+++ b/Quake/sbar.c	2026-10-03 18:54:23.000000000 +0000
++++ b/Quake/sbar.c	2026-10-03 19:50:10.000000000 +0000
 @@ -1605,6 +1605,56 @@
  Sbar_Draw
  ===============
@@ -841,7 +978,7 @@
  		return;		// console is full screen
  
 --- a/Quake/server.h	origen
-+++ b/Quake/server.h	2026-10-03 18:54:23.000000000 +0000
++++ b/Quake/server.h	2026-10-03 19:50:10.000000000 +0000
 @@ -307,4 +307,9 @@
  void SV_SaveSpawnparms (void);
  void SV_SpawnServer (const char *server);
@@ -853,7 +990,7 @@
 +
  #endif	/* QUAKE_SERVER_H */
 --- a/Quake/sv_main.c	origen
-+++ b/Quake/sv_main.c	2026-10-03 18:54:23.000000000 +0000
++++ b/Quake/sv_main.c	2026-10-03 19:50:10.000000000 +0000
 @@ -23,10 +23,15 @@
  // sv_main.c -- server main program
  
@@ -904,7 +1041,7 @@
  // set view
  	MSG_WriteByte (&client->message, svc_setview);
 --- a/Quake/view.c	origen
-+++ b/Quake/view.c	2026-10-03 18:54:23.000000000 +0000
++++ b/Quake/view.c	2026-10-03 19:50:10.000000000 +0000
 @@ -714,6 +714,7 @@
  	side = V_CalcRoll (cl_entities[cl.viewentity].angles, cl.velocity);
  	r_refdef.viewangles[ROLL] += side;

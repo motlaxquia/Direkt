@@ -63,6 +63,12 @@ CFG_LINE=()
 WALK=0
 TURN=0
 JUMP=0
+# --tecla SHIFT:5 pulsa esa tecla de verdad durante 5 segundos del asiento.
+# Hace falta porque hay teclas que el juego solo ve si el cliente las cuenta
+# (ver Key_ImpulsoTeclas en los motores), y a "+algo" no llega: el motor decide
+# si la tecla esta pulsada, no que comando tenga enlazado.
+TECLA=""
+TECLA_SEGUNDOS=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -84,6 +90,12 @@ while [[ $# -gt 0 ]]; do
     --walk)     WALK=1; shift ;;
     --turn)     TURN=1; shift ;;
     --jump)     JUMP=1; shift ;;
+    # --tecla NOMBRE[:segundos]
+    --tecla)    TECLA="$2"; shift 2
+                if [[ "$TECLA" == *:* ]]; then
+                  TECLA_SEGUNDOS="${TECLA##*:}"
+                  TECLA="${TECLA%%:*}"
+                fi ;;
     -h|--help) sed -n '2,10p' "$0" | sed 's/^# \?//'; exit 0 ;;
     *) die "opcion desconocida: $1" ;;
   esac
@@ -231,6 +243,34 @@ for ((j = 0; j < 120; j++)); do
   sleep 1
 done
 ((loaded)) && info "mundo cargado en ${j}s (mas ${SETTLE}s de asentar)" || info "aviso: no se confirmo la entrada al mundo"
+
+# --------------------------------------------------- tecla pulsada de verdad
+#
+# Se pulsa con xdotool contra el Xvfb de este mismo display. Se hace aparte del
+# asiento para que la tecla este DOWN justo cuando toca: se suelta antes y se
+# vuelve a pulsar, que es lo que hace un jugador.
+#
+# xdotool solo viene en el banco de pruebas de Linux (apt-get install xdotool).
+# Si no esta, se dice y se sigue: la prueba que dependa de esto se salta sola en
+# vez de dar un falso negativo.
+pulsar_tecla=0
+if [[ -n "$TECLA" ]]; then
+  if command -v xdotool >/dev/null 2>&1; then
+    pulsar_tecla=1
+  else
+    info "aviso: xdotool no esta, la tecla $TECLA no se puede pulsar"
+  fi
+fi
+if ((pulsar_tecla)); then
+  ((TECLA_SEGUNDOS > 0)) || TECLA_SEGUNDOS="$SETTLE"
+  xdotool keyup "$TECLA" 2>/dev/null || true
+  sleep 0.5
+  xdotool keydown "$TECLA" 2>/dev/null || true
+  info "tecla $TECLA pulsada ${TECLA_SEGUNDOS}s"
+  sleep "$TECLA_SEGUNDOS"
+  xdotool keyup "$TECLA" 2>/dev/null || true
+fi
+
 sleep "$SETTLE"
 
 # --------------------------------------------------------------- captura

@@ -122,6 +122,14 @@ void() worldspawn =
 
 	localcmd(" echo DIREKT: progs.dat propio cargado");
 
+	// La sonda del parkour: una entidad invisible que solo guarda el vector del
+	// traceline para poderle leer un componente. Ver direkt_piso() en parkour.qc.
+	direkt_sonda = spawn();
+	direkt_sonda.classname = "direkt_sonda";
+	direkt_sonda.solid = SOLID_NOT;
+	direkt_sonda.movetype = MOVETYPE_NONE;
+	direkt_sonda.angles = '0 0 0';
+
 	// OJO: en worldspawn, self ES la entidad world, y QuakeC aborta con
 	// "assignment to world entity" si le tocas un campo. El think tiene que
 	// vivir en una entidad normal.
