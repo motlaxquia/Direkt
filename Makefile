@@ -50,6 +50,23 @@ BUILD    := $(REPO)/build
 BIN      := $(BUILD)/bin
 ENGINE   := $(BUILD)/src/ironwail
 LQ       := $(BUILD)/lq/full          # basedir valido: contiene id1/pak0.pak
+# Datos PROPIOS. Van en un basedir aparte y POR DELANTE de LibreQuake, que es
+# como funciona la precedencia del motor: el primer -basedir gana y todo lo que
+# este en el se sobrepone a los paks. Sin esto no se puede cambiar ni un
+# sonido, porque los paks de LibreQuake estan cerrados.
+#
+# DATOS    es nuestro basedir, con id1/pak0.pak NUESTRO.
+# LQDATOS  es LibreQuake, que queda como respaldo.
+# ASSETS   son los ficheros sueltos que se copian a id1/.
+# OJO: sin espacios antes del #. En una asignacion ":= ", el espacio que separa
+# del comentario se queda PEGADO al valor, y luego "x $(VAR)/y" sale como dos
+# argumentos en vez de uno. Por eso los comentarios de estas van en su linea.
+DATOS    := $(BUILD)/datos
+LQDATOS  := $(BUILD)/lq/full
+ASSETS   := $(REPO)/assets
+# Python se busca una vez aqui. En Linux y macOS es python3 y en un Windows
+# viejo puede ser solo python.
+PYTHON   := $(shell command -v python3 || command -v python)
 IW_VER   := $(BUILD)/.engine-stamp
 
 # El generador de .bsp es codigo nuestro y solo depende de libc y libm, asi que
@@ -199,6 +216,28 @@ test: engine game game-noshowcase bsp edit
 	@$(REPO)/scripts/bsp-test.sh $(BSP_TEST_ARGS)
 	@$(REPO)/scripts/editor-test.sh $(EDITOR_TEST_ARGS)
 	@$$(command -v python3 || command -v python) $(REPO)/tools/menu.py --probar
+
+# ------------------------------------------------ datos propios
+#
+# pak0.pak NUESTRO tiene que existir siempre, porque el motor exige que el primer
+# -basedir tenga id1/pak0.pak y aborta si no. Por eso se genera uno minimo aunque
+# no haya nada que meter: un pak vacio de 12 bytes cumple.
+#
+# Los assets sueltos (lo que este en assets/) se dejan tambien en id1/ como
+# ficheros sueltos. El motor busca primero en el pak y luego en el directorio, y
+# con las dos cosas en el mismo basedir el pak gana; por eso lo que se quiere
+# pisar va como fichero suelto y lo demas se queda en LibreQuake.
+assets:
+	@$(PYTHON) $(REPO)/tools/mdlgen.py \
+		--paleta $(LQDATOS)/id1/pak0.pak \
+		--salida $(BUILD)/assets/progs/gibhead.mdl
+	@mkdir -p $(DATOS)/id1
+	@cp -a $(BUILD)/assets/. $(DATOS)/id1/
+	@if [ -d $(ASSETS) ]; then cp -a $(ASSETS)/. $(DATOS)/id1/ 2>/dev/null || true; fi
+	@$(PYTHON) $(REPO)/tools/mpak.py \
+		--salida $(DATOS)/id1/pak0.pak \
+		progs/gibhead.mdl:$(BUILD)/assets/progs/gibhead.mdl
+	@echo "    ok: $(DATOS)/id1"
 
 # ------------------------------------------------ motor de recursos bajos
 #

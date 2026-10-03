@@ -522,6 +522,36 @@ void(entity victima) direkt_gibs =
 // los nuestros igual.
 void() direkt_gib_quita = { remove(self); };
 
+// La cabeza, que es nuestro modelo propio. Se lanza mas lejos y mas alta que
+// los pedazos, que es como se nota que es la cabeza y no un trozo mas.
+void(entity victima) direkt_cabeza =
+{
+	local entity c;
+
+	c = spawn();
+	c.classname = "direkt_cabeza";
+	c.solid = SOLID_NOT;
+	c.movetype = MOVETYPE_TOSS;
+	c.model = "progs/gibhead.mdl";
+	setmodel(c, c.model);
+	setsize(c, VEC_ORIGIN, VEC_ORIGIN);
+
+	c.origin = victima.origin;
+	c.origin_z = victima.origin_z + 8;
+	c.velocity_x = victima.velocity_x + 90;
+	c.velocity_y = victima.velocity_y - 90;
+	c.velocity_z = 190;
+	c.angles = victima.angles;
+	c.avelocity_x = 260;
+	c.avelocity_y = 190;
+
+	// La cabeza lleva su sonido propio, que es el que hace "plaf".
+	sound(c, CHAN_BODY, "player/gib.wav", 0.7, ATTN_NORM);
+
+	c.think = direkt_gib_quita;
+	c.nextthink = time + 6;
+}
+
 // de por si. La alternativa era poner el modelo del jugador a media
 // transparencia, pero el campo alpha no existe en el lado de QuakeC: es una
 // extension del motor que no se puede tocar desde el juego, y anadirla obliga a
@@ -538,9 +568,10 @@ void(entity victima) direkt_muerte_jugador =
 		direkt_test_muerte_armado = 0;
 	}
 
-	// Los pedazos salen antes de tocar nada del jugador, que si no se los lleva
-	// el cambio de estado de despues.
+	// Los pedazos y la cabeza salen antes de tocar nada del jugador, que si no
+	// se los lleva el cambio de estado de despues.
 	direkt_gibs(victima);
+	direkt_cabeza(victima);
 
 	victima.deadflag = DEAD_DYING;
 	victima.takedamage = DAMAGE_NO;

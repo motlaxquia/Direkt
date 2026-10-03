@@ -38,6 +38,11 @@ void() direkt_precache_assets =
 	direkt_precache("progs/gib3.mdl");
 	direkt_precache("progs/zom_gib.mdl");
 
+	// La cabeza es NUESTRA. LibreQuake no trae gibhead.mdl y el original es
+	// propietario de id Software, asi que lo genera tools/mdlgen.py. Va en el
+	// pak propio, que es el primer -basedir y por eso gana a LibreQuake.
+	direkt_precache("progs/gibhead.mdl");
+
 	// --- sonidos de muerte ---
 	// gib.wav es el de los pedazos. Sin precargarlo el motor avisa por consola
 	// y lo deja sin sonido.

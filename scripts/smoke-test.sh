@@ -71,6 +71,12 @@ head_ "1. Datos de LibreQuake"
 PAK="$BUILD/lq/full/id1/pak0.pak"
 [[ -f "$PAK" ]] || die "faltan los datos. Ejecuta 'make deps'."
 
+# Nuestro propio pak. Va POR DELANTE de LibreQuake en el motor (es el primer
+# -basedir), asi que un asset puede estar aqui y no en LibreQuake. Por eso se
+# miran los dos: lo que este en cualquiera de los dos existe para el motor.
+PAK_NUESTRO="$BUILD/datos/id1/pak0.pak"
+[[ -f "$PAK_NUESTRO" ]] || die "falta el pak propio. Ejecuta 'make assets'."
+
 # El inventario del PAK, una sola vez: se reusa para sprites y assets.
 pak_list() { $PY_CMD "$REPO_ROOT/tools/pakinfo.py" "$PAK" --list; }
 
@@ -113,11 +119,14 @@ done
 
 # Todo lo que el juego precarga tiene que existir en el PAK. Si no, el motor
 # avisa por el log y el resultado depende del que le pase: mejor fallar aqui.
-inventory="$(pak_list)"
+nuestros="$("$PY_CMD" "$REPO_ROOT/tools/mpak.py" --listar "$PAK_NUESTRO" | awk '{print $2}')"
+librequake="$(pak_list | awk '{print $2}')"
+inventory="$nuestros
+$librequake"
 missing=0
 while read -r name; do
   [[ -n "$name" ]] || continue
-  if ! printf '%s\n' "$inventory" | grep -qE "[[:space:]]$(sed 's/[.[\*^$]/\\&/g' <<<"$name")$"; then
+  if ! printf '%s\n' "$inventory" | grep -qE "(^|[[:space:]])$(sed 's/[.[\*^$]/\\&/g' <<<"$name")$"; then
     printf '        falta en el PAK: %s\n' "$name" >&2
     missing=$((missing + 1))
   fi
@@ -125,9 +134,9 @@ done < <(sed -n 's/^[[:space:]]*direkt_precache("\(.*\)");.*/\1/p' \
          "$REPO_ROOT/game/qc/assets.qc" | sort -u)
 
 if ((missing == 0)); then
-  ok "todos los assets precargados existen en el PAK"
+  ok "todos los assets precargados existen en algun PAK"
 else
-  ko "$missing assets precargados no existen en el PAK"
+  ko "$missing assets precargados no existen en ningun PAK"
 fi
 
 head_ "2. Arranque con progs.dat propio"

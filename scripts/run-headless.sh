@@ -133,7 +133,10 @@ rm -f "$CFG_TMP"
 
 # Rutas relativas a proposito: argv[0] entra tambien en la linea de comandos que
 # el motor trunca, y las rutas absolutas de este repo se comen ~40 caracteres.
+# El primer -basedir es el nuestro: lo que hay en el gana a los paks de
+# LibreQuake, que van en el segundo. Ver el comentario de DATOS en el Makefile.
 args=(
+  -basedir build/datos
   -basedir build/lq/full
   -basedir .
   -game "$GAMEDIR_NAME"
@@ -144,11 +147,24 @@ args=(
   -width "$WIDTH"
   -height "$HEIGHT"
   +exec "$TESTCFG"
-  +set scr_drawsb 0
   +map "$MAP"
   +echo "DIREKT:map-command-issued"
 )
 [[ ${#EXTRA[@]} -gt 0 ]] && args+=( "${EXTRA[@]}" )
+
+# El motor limita la linea de comandos (CMDLINE_LENGTH, 255 en FTE) y lo que
+# pase de ahi NO LLEGA. Es un fallo silencioso: el motor arranca igual, pero se
+# come el ultimo "+impulse 26" o el "+extra" que se le haya puesto, y el banco
+# de pruebas se queda sin su prueba sin decir por que. Ya ha pasado dos veces.
+if (( ${#args[@]} > 0 )); then
+  largo="${args[0]}"
+  for a in "${args[@]:1}"; do largo="$largo $a"; done
+  if (( ${#largo} > 250 )); then
+    die "la linea de comandos se pasa de 250 caracteres (${#largo})." \
+        "El motor la trunca en 255 y lo que se pase no llega. Mete menos" \
+        "--extra, o mueve el argumento a un cfg con --cfg-line."
+  fi
+fi
 
 # Cmd_StuffCmds_f lee el cvar "cmdline", y ese cvar sale de com_cmdline, que
 # Ironwail limita a CMDLINE_LENGTH-1 = 255 caracteres. Si nos pasamos, los
