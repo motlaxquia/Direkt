@@ -12,7 +12,6 @@
 #   Quake/main_sdl.c
 #   Quake/net_udp.c
 #   Quake/sbar.c
-#   Quake/sv_user.c
 #   Quake/view.c
 #   Quake/wsaerror.h
 #
@@ -34,7 +33,7 @@
 #   * El parche se genera contra el ORIGINAL, no contra el arbol ya parcheado.
 #     Si no, el diff incluye los cambios del parche anterior dos veces.
 --- a/Quake/Makefile	origen
-+++ b/Quake/Makefile	2026-10-03 15:39:32.000000000 +0000
++++ b/Quake/Makefile	2026-10-03 17:16:40.000000000 +0000
 @@ -140,9 +140,16 @@
  endif
  ifeq ($(USE_CODEC_VORBIS),1)
@@ -70,8 +69,8 @@
  else
  COMMON_LIBS= -lGL -lm
 --- a/Quake/cvar.c	origen
-+++ b/Quake/cvar.c	2026-10-03 15:39:32.000000000 +0000
-@@ -223,6 +223,33 @@
++++ b/Quake/cvar.c	2026-10-03 17:16:40.000000000 +0000
+@@ -223,6 +223,29 @@
  ============
  */
  
@@ -97,39 +96,33 @@
 +// muere, y se borra cuando reaparece.
 +cvar_t		scr_msgline = {"scr_msgline", "", CVAR_ARCHIVE};
 +
-+// Al morir, la camara se queda recta. Lo pone el juego con un stuffcmd de una
-+// palabra, porque desde el cliente no se puede saber si el jugador esta muerto
-+// (la vida vive en el QC del servidor). Ver V_CalcViewRoll.
-+cvar_t		cl_deadnoroll = {"cl_deadnoroll", "0", 0};
 +
  void Cvar_Init (void)
  {
  	Cmd_AddCommand ("cvarlist", Cvar_List_f);
-@@ -232,6 +259,10 @@
+@@ -232,6 +255,9 @@
  	Cmd_AddCommand ("reset", Cvar_Reset_f);
  	Cmd_AddCommand ("resetall", Cvar_ResetAll_f);
  	Cmd_AddCommand ("resetcfg", Cvar_ResetCfg_f);
 +
 +	Cvar_RegisterVariable (&scr_drawsb);
 +	Cvar_RegisterVariable (&scr_msgline);
-+	Cvar_RegisterVariable (&cl_deadnoroll);
  }
  
  //==============================================================================
 --- a/Quake/cvar.h	origen
-+++ b/Quake/cvar.h	2026-10-03 15:39:32.000000000 +0000
-@@ -41,6 +41,9 @@
++++ b/Quake/cvar.h	2026-10-03 17:16:40.000000000 +0000
+@@ -41,6 +41,8 @@
  init function before any console commands are executed:
  
  Cvar_RegisterVariable (&host_framerate);
 +extern cvar_t	scr_drawsb;
 +extern cvar_t	scr_msgline;
-+extern cvar_t	cl_deadnoroll;
  
  
  C code usually just references a cvar in place:
 --- a/Quake/gl_screen.c	origen
-+++ b/Quake/gl_screen.c	2026-10-03 15:39:32.000000000 +0000
++++ b/Quake/gl_screen.c	2026-10-03 17:16:40.000000000 +0000
 @@ -281,6 +281,8 @@
  Internal use only
  =================
@@ -156,7 +149,7 @@
  	else if (size >= 110)
  		sb_lines = 24 * scale;
 --- a/Quake/main_sdl.c	origen
-+++ b/Quake/main_sdl.c	2026-10-03 15:39:32.000000000 +0000
++++ b/Quake/main_sdl.c	2026-10-03 17:16:40.000000000 +0000
 @@ -65,7 +65,13 @@
  
  // On OS X we call SDL_main from the launcher, but SDL2 doesn't redefine main
@@ -173,7 +166,7 @@
  #endif
  
 --- a/Quake/net_udp.c	origen
-+++ b/Quake/net_udp.c	2026-10-03 15:39:32.000000000 +0000
++++ b/Quake/net_udp.c	2026-10-03 17:16:40.000000000 +0000
 @@ -72,8 +72,11 @@
  #endif
  		if (!(local = gethostbyname(buff)))
@@ -209,7 +202,7 @@
  		int err = SOCKETERRNO;
  		Sys_Error ("UDP: ioctlsocket (FIONREAD) failed (%s)", socketerror(err));
 --- a/Quake/sbar.c	origen
-+++ b/Quake/sbar.c	2026-10-03 15:39:32.000000000 +0000
++++ b/Quake/sbar.c	2026-10-03 17:16:40.000000000 +0000
 @@ -892,10 +892,68 @@
  Sbar_Draw
  ===============
@@ -279,59 +272,44 @@
  	if (scr_con_current == vid.height)
  		return;		// console is full screen
  
---- a/Quake/sv_user.c	origen
-+++ b/Quake/sv_user.c	2026-10-03 15:39:32.000000000 +0000
-@@ -404,7 +404,13 @@
- 	angles = sv_player->v.angles;
- 
- 	VectorAdd (sv_player->v.v_angle, sv_player->v.punchangle, v_angle);
--	angles[ROLL] = V_CalcRoll (sv_player->v.angles, sv_player->v.velocity)*4;
-+	// El alabeo sale de la velocidad lateral, y por eso al morir se veia la
-+	// pantalla ladeada: el cadaver cae con algo de lado y la vista se banking
-+	// con el. Con la vida a cero el alabeo se queda a cero, y lo que se quiere
-+	// al morir es justo que la camara se quede recta siguiendo la cabeza.
-+	angles[ROLL] = sv_player->v.health <= 0
-+		? 0
-+		: V_CalcRoll (sv_player->v.angles, sv_player->v.velocity)*4;
- 	if (!sv_player->v.fixangle)
- 	{
- 		angles[PITCH] = -v_angle[PITCH]/3;
 --- a/Quake/view.c	origen
-+++ b/Quake/view.c	2026-10-03 15:39:32.000000000 +0000
-@@ -685,11 +685,30 @@
++++ b/Quake/view.c	2026-10-03 17:16:40.000000000 +0000
+@@ -685,6 +685,7 @@
  Roll is induced by movement and damage
  ==============
  */
-+extern cvar_t	cl_deadnoroll;
 +
  void V_CalcViewRoll (void)
  {
  	float		side;
+@@ -699,9 +700,24 @@
+ 		v_dmg_time -= host_frametime;
+ 	}
  
--	side = V_CalcRoll (cl_entities[cl.viewentity].angles, cl.velocity);
-+	// Al morir el cadaver cae con algo de lado y la pantalla se ladeaba sola,
-+	// que no es lo que se quiere: al morir la camara se queda recta, en su sitio,
-+	// siguiendo la cabeza.
++	// El balanceo de muerto. Este if es el que ladeaba la pantalla, y no era el
++	// alabeo por velocidad: el motor tiene aqui un 80 GRADOS de inclinacion fijo
++	// para cuando la vida llega a cero.
 +	//
-+	// Desde aqui NO se puede mirar la vida. entity_t es la entidad del cliente y
-+	// no lleva health: la vida vive en el QC del servidor. Por eso lo decide el
-+	// juego con un cvar, que es lo unico que cruza de un lado al otro:
++	// Con el juego asi (una vida, un golpe y a otra vida) ese 80 sale siempre que
++	// se muere, que es todos los casos. Y ademas el cuerpo ya caia de lado por su
++	// cuenta, con lo que se acumulaban los dos.
 +	//
-+	//     stuffcmd (self, "cl_deadnoroll 1");
++	// Lo que se quiere es lo contrario de lo clasico de Quake: al morir la camara
++	// se queda RECTA, en el sitio donde estaba, siguiendo solo la cabeza. Asi que
++	// el 80 se quita y el alabeo por velocidad (el de mas arriba, que se respeta
++	// andando) se deja como estaba.
 +	//
-+	// Y "1" es una palabra suelta, sin espacios, que es lo unico que se puede
-+	// pasar desde QuakeC (ver el aviso de scr_msgline en cvar.c).
-+	//
-+	// OJO: esto NO es el "sv_user.c" de mas abajo, que es el balanceo del MODELO.
-+	// Este es el de la CAMARA, y solo este quita la pantalla ladeada.
-+	side = cl_deadnoroll.value
-+		? 0
-+		: V_CalcRoll (cl_entities[cl.viewentity].angles, cl.velocity);
- 	r_refdef.viewangles[ROLL] += side;
- 
- 	if (v_dmg_time > 0)
++	// Y no se decide con un cvar porque la vida YA esta aqui, en el cliente
++	// (cl.stats[STAT_HEALTH]), que es la condicion de la linea original.
+ 	if (cl.stats[STAT_HEALTH] <= 0)
+ 	{
+-		r_refdef.viewangles[ROLL] = 80;	// dead view angle
++		r_refdef.viewangles[ROLL] = 0;
+ 		return;
+ 	}
+ }
 --- a/Quake/wsaerror.h	origen
-+++ b/Quake/wsaerror.h	2026-10-03 15:39:32.000000000 +0000
++++ b/Quake/wsaerror.h	2026-10-03 17:16:40.000000000 +0000
 @@ -6,6 +6,14 @@
   * http://www.sockets.com/err_lst1.htm
   */

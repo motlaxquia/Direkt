@@ -600,6 +600,24 @@ void(entity victima) direkt_muerte_jugador =
 	victima.weaponmodel = "";
 	victima.weaponframe = 0;
 
+	// El balanceo a cero. Esta es la razon de que la pantalla se viera ladeada al
+	// morir, y no es cosa del motor ni de un cvar:
+	//
+	// SV_ClientThink (sv_user.c) calcula angles[ROLL] con la velocidad lateral
+	// del jugador, pero hace "if (health <= 0) return" ANTES de calcularlo. O
+	// sea que al morir no vuelve a tocar ese angulo y se queda con el valor que
+	// tenia en el ultimo frame en vida. Y en juego local la camara ES la entidad
+	// del jugador, con lo que ese balanceo congelado se ve en la pantalla tal
+	// cual, para siempre.
+	//
+	// Ponerlo a cero aqui lo deja en el motor, sin tocarlo: el motor lo deja
+	// como esta en cuanto se pone a cero.
+	// No se puede hacer "angles[2] = 0": fteqcc lo lee como asignacion a un
+	// array entero. Se pone el vector entero a cero, que es lo mismo aqui
+	// porque el balanceo es el eje Z y al morir el cuerpo no tiene por que mirar
+	// a ningun sitio en concreto.
+	victima.angles = '0 0 0';
+
 	victima.health = 0;
 	victima.max_health = DIREKT_MAX_HEALTH;
 	victima.armorvalue = 0;
@@ -615,12 +633,6 @@ void(entity victima) direkt_muerte_jugador =
 	victima.velocity_z = 100;
 	victima.think = direkt_jugador_cae;
 	victima.nextthink = time + 0.5;
-
-	// La camara se queda recta al morir. No se puede decidir desde el cliente si
-	// el jugador esta muerto, porque la vida vive en el QC del servidor, con lo
-	// que se le avisa con un cvar. "1" es una palabra suelta, sin espacios, que
-	// es lo unico que pasa bien desde QuakeC.
-	stuffcmd(victima, "cl_deadnoroll 1");
 
 	// El ENTER para reintentar se enlaza aqui. Esto SI funciona: "bind" es un
 	// comando normal y el motor lo ejecuta tal cual.
@@ -662,8 +674,6 @@ void() direkt_jugador_reintentar =
 	if (!self.deadflag)
 		return;
 
-	// Y al volver, la camara vuelve a inclinarse con el movimiento.
-	stuffcmd(self, "cl_deadnoroll 0");
 	self.think = direkt_nada;
 	self.nextthink = 0;
 	PutClientInServer();
