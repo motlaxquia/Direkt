@@ -33,8 +33,8 @@
 // defs.qc, como #define, para que la puedan usar client.qc y player.qc. Alli esta
 // el motivo de que sea un #define y no una variable.
 
-// Peso de la gravedad del jugador. Se toca para los saltos y el agua.
-float DIREKT_GRAVITY_SCALE = 1;
+// El peso de la gravedad del jugador (DIREKT_GRAVITY_SCALE) esta en parkour.qc,
+// que es el primer fichero de progs.src y el que lo usa para el planeo.
 
 // ---------------------------------------------------------------- baggage
 void() main =

@@ -44,14 +44,21 @@ float()	direkt_piso_sonda;
 float()	direkt_pulsada_mod;
 float()	direkt_pulsada_deslizar;
 void()	direkt_bunny_hop;
+void()	direkt_dash;
+void()	direkt_dash_arranca;
+void()	direkt_planeo;
+void()	direkt_salto_pared;
+void()	direkt_carrera_muro;
+float	direkt_carrera_muro_activa;
 void()	direkt_bhop_mide;
 float	direkt_bhop_maxima;
+float	direkt_planeo_max_caida;
 void()	direkt_limita_velocidad;
 float()	direkt_piso_sonda;
 // Impulso extra por frame mientras se mantiene el salto subiendo. Con 16 el salto
 // queda claramente mas alto; con 40 el motor se atasca.
 #define DIREKT_SALTO_EXTRA 16
-#define DIREKT_SALTO_TOPE  420
+#define DIREKT_SALTO_TOPE  320
 
 void()	direkt_salto_alto;
 void()	direkt_salta;
@@ -244,9 +251,20 @@ void() direkt_prethink_jugador =
 	{
 		direkt_desliza();
 
-		// Con el modificador, el bunny hop manda y el salto normal no se toca.
+			// Con el modificador, el bunny hop manda y el salto normal no se toca.
 		if (direkt_pulsada_mod())
+		{
 			direkt_bunny_hop();
+			direkt_dash_arranca();
+
+			// El salto contra la pared y la carrera por la pared se deciden antes
+			// que el dash: si hay una pared cerca mandan ellas, y el dash es lo que
+			// queda cuando no hay ninguna.
+			direkt_salto_pared();
+			direkt_carrera_muro();
+			if (!direkt_carrera_muro_activa)
+				direkt_dash();
+		}
 		else
 			direkt_salta();
 	}
@@ -327,8 +345,16 @@ void() direkt_prethink_jugador =
 		direkt_impulso();
 	}
 
-	// El tope de velocidad, aqui al final porque manda sobre todo: si no, el dash
-	// o el planeo podrian dejar al jugador por encima del tope en el mismo frame.
+	// El dash se reaplica cada frame mientras dure, asi que va despues del tope
+	// general: si fuera antes, el tope se lo comeria. Si hay carrera por la pared,
+	// el dash no se toca: la pared manda.
+	if (!direkt_carrera_muro_activa)
+		direkt_dash();
+
+	// El planeo va el ultimo porque deja el jugador como estaba gravity = 1.
+	direkt_planeo();
+
+	// Y el tope de velocidad, que manda sobre todo lo demas.
 	direkt_limita_velocidad();
 
 	// Disparar.
@@ -1233,6 +1259,18 @@ void() direkt_informa_movimiento =
 		localcmd(" echo DIREKT: bunny hop normal");
 	else if (direkt_bhop_maxima > 1)
 		localcmd(" echo DIREKT: bunny hop lento");
+
+	// Caida maxima con planeo. Con el recorte puesto no puede pasar de 200, que es
+	// lo que demuestra que el planeo frena de verdad y no solo se activa.
+	if (direkt_planeo_max_caida < -1)
+	{
+		if (direkt_planeo_max_caida > -200)
+			localcmd(" echo DIREKT: planeo frenando la caida");
+		else if (direkt_planeo_max_caida > -400)
+			localcmd(" echo DIREKT: planeo frenando poco");
+		else
+			localcmd(" echo DIREKT: planeo sin frenado");
+	}
 
 	// Estado del agachado. La caja encogida y el ojo bajo son lo que de verdad
 	// impiden pasar por un hueco, asi que se informa de los dos.

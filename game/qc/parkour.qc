@@ -54,14 +54,21 @@
 // vuelve a mandar cada frame mientras la tecla este pulsada. Asi que no hace
 // falta guardar si se pulso: basta con leer el impulso de este frame.
 //
-// Con una salvedad: si se pierde un paquete, llega un frame sin impulso y la
-// tecla parece soltada. Por eso no se decide "pulsada o no" sino "pulsada hace
-// poco": se guarda el instante y se da una gracia. Un frame perdido no corta el
-// dash a la mitad.
+// Con dos salvedades, y las dos medidas en este banco:
+//
+//   - Si se pierde un paquete llega un frame sin impulso.
+//   - X11 manda repeticiones de teclado y, segun como llegan, el motor las ve como
+//     pulsar-soltar. Medido: con Shift mantenido quince segundos el juego recibia
+//     cuatro sueltas, y los huecos llegaban a 18 frames (unos 0,4 s a 45 fps).
+//
+// Por eso no se decide "pulsada o no" sino "pulsada hace poco": se guarda el
+// instante y se da una gracia de medio segundo. Sin esto, en Linux, el dash, el
+// deslizamiento y el planeo se cortan solos cada 1,6 segundos sin haber tocado
+// nada.
 #define DIREKT_IMPULSO_MOD      27	// Shift: dash, planeo y carrera por la pared
 #define DIREKT_IMPULSO_DESLIZAR 28	// Ctrl: deslizarse
 
-#define DIREKT_TECLA_GRACIA 0.15
+#define DIREKT_TECLA_GRACIA 0.5
 
 float	direkt_mod_hasta;			// hasta que momento vale Shift
 float	direkt_deslizar_hasta;	// hasta que momento vale Ctrl
@@ -83,6 +90,14 @@ void() direkt_teclas =
 
 float() direkt_pulsada_mod = { return time < direkt_mod_hasta; };
 float() direkt_pulsada_deslizar = { return time < direkt_deslizar_hasta; };
+
+// ------------------------------------------------------------------ gravedad
+//
+// Peso normal de la gravedad del jugador. Lo lee SV_AddGravity (sv_phys.c) como
+// multiplicador POR ENTIDAD, asi que es el juego quien lo pone y el motor solo lo
+// multiplica por sv_gravity. Vive aqui, y no en client.qc, porque parkour.qc es el
+// primer fichero de progs.src y es el que lo cambia con el planeo.
+float	DIREKT_GRAVITY_SCALE = 1;
 
 // ------------------------------------------------------------------ componentes
 //
@@ -129,13 +144,19 @@ float() direkt_piso =
 // saber que el motor esta aplicando la gravedad donde debe. Si un dia dejaran de
 // coincidir, el banco de pruebas lo dira en vez de que el parkour falle raro.
 #define DIREKT_SUELO_DISTANCIA 32
+// Uno mas que el pie de la caja del jugador, que llega a -24.
+#define DIREKT_SUELO_SALIDA 25
 #define DIREKT_SUELO_NORMAL_MINIMA 0.5
 
 float() direkt_piso_sonda =
 {
 	local vector normal;
 
-	traceline(self.origin, self.origin - ('0 0 1' * DIREKT_SUELO_DISTANCIA), 1, self);
+	// Igual que la sonda de pared: el rayo arranca por debajo de la caja del jugador
+	// (que llega a -24), no en su centro, o el motor lo marca como "empezando dentro
+	// de algo" y el resultado no sirve para nada.
+	traceline(self.origin - ('0 0 1' * DIREKT_SUELO_SALIDA),
+	          self.origin - ('0 0 1' * DIREKT_SUELO_DISTANCIA), 1, self);
 	if (trace_fraction >= 1)
 		return 0;
 
@@ -155,7 +176,16 @@ vector	direkt_pared_normal;
 
 // La distancia, o 0 si no hay nada.
 #define DIREKT_PARED_DISTANCIA 24
+// Uno mas que la semi-caja del jugador: el rayo tiene que arrancar fuera de el.
+#define DIREKT_PARED_SALIDA 17
 
+// El muro mas cercano de los cuatro lados, con su normal.
+//
+// Con dos (izquierda y derecha) habia sitios donde no se encontraba nada: un rayo
+// en una sola direccion es fragil, porque si el jugador esta un poco mas alla de la
+// linea de la pared, o mira un poco de lado, el rayo pasa de largo. Con cuatro
+// direcciones (los dos lados y delante y detras) hay cuatro oportunidades, y el
+// mas cercano gana.
 float(vector hacia) direkt_pared =
 {
 	local float d;
@@ -163,13 +193,73 @@ float(vector hacia) direkt_pared =
 	if (!hacia)
 		return 0;
 
-	traceline(self.origin, self.origin + hacia * DIREKT_PARED_DISTANCIA, 1, self);
+	// OJO: el rayo arranca FUERA de la caja del jugador, no en su centro.
+	//
+	// La caja mide 16 de semi-ancho (DIRECTION_ALTO_MINS = '-16 -16 -24'), asi que
+	// desde el centro el punto de partida esta dentro del propio jugador. El motor
+	// marca trace_startsolid y trace_fraction sale 0, que es el mismo numero que
+	// "no hay nada", asi que la sonda de pared encontraba CERO aunque tuviese el
+	// muro pegado a la nariz. Por eso se sale 17, uno mas que la caja.
+	traceline(self.origin + hacia * DIREKT_PARED_SALIDA,
+	          self.origin + hacia * DIREKT_PARED_DISTANCIA, 1, self);
 	if (trace_fraction >= 1)
 		return 0;
 
 	direkt_pared_normal = trace_plane_normal;
-	d = trace_fraction * DIREKT_PARED_DISTANCIA;
+	d = DIREKT_PARED_SALIDA
+	  + trace_fraction * (DIREKT_PARED_DISTANCIA - DIREKT_PARED_SALIDA);
 	return d;
+};
+
+vector	direkt_muro_cerca_normal;
+
+float() direkt_muro_cerca =
+{
+	local vector derecha;
+	local vector delante;
+	local vector normal;
+	local float mejor;
+	local float d;
+
+	makevectors(self.v_angle);
+
+	derecha = v_right;
+	derecha_z = 0;
+	delante = v_forward;
+	delante_z = 0;
+
+	mejor = 0;
+	normal = '0 0 0';
+
+	d = direkt_pared(derecha);
+	if (d > 0)
+	{
+		mejor = d;
+		normal = direkt_pared_normal;
+	}
+
+	d = direkt_pared(derecha * -1);
+	if (d > 0 && (mejor <= 0 || d < mejor))
+	{
+		mejor = d;
+		normal = direkt_pared_normal;
+	}
+
+	d = direkt_pared(delante);
+	if (d > 0 && (mejor <= 0 || d < mejor))
+	{
+		mejor = d;
+		normal = direkt_pared_normal;
+	}
+
+	d = direkt_pared(delante * -1);
+	if (d > 0 && (mejor <= 0 || d < mejor))
+	{
+		mejor = d;
+		normal = direkt_pared_normal;
+	}
+
+	return mejor;
 };
 
 // Componentes de la ultima normal, en coordenadas locales de la pared: no
@@ -290,11 +380,13 @@ void() direkt_avisa_piso =
 			// salto llega a unos 45 y con el a unos 75. Un salto del Quake de
 			// siempre son unos 56, asi que el empuje lo deja mas alto que el
 			// original, que es lo que se buscaba.
-			if (altura < 40)
+			// Tramos medidos con el tope de 320: un salto del Quake de siempre
+			// llega a unos 56 y con nuestro empuje a unos 70-85.
+			if (altura < 55)
 				localcmd(" echo DIREKT: el salto es corto");
-			else if (altura < 65)
+			else if (altura < 70)
 				localcmd(" echo DIREKT: el salto es normal");
-			else if (altura < 95)
+			else if (altura < 100)
 				localcmd(" echo DIREKT: el salto es alto");
 			else
 				localcmd(" echo DIREKT: el salto es gigante");
@@ -637,3 +729,353 @@ void() direkt_bunny_hop =
 		localcmd(" echo DIREKT: bunny hop");
 	}
 };
+
+// ------------------------------------------------------------------ dash
+//
+// Que es
+//
+// Un empujon horizontal corto en la direccion a la que se mira, hecho en el aire.
+// Con el Shift pressed en cuanto se entra en modo aire.
+//
+// No se puede hacer "una vez" y ya: si solo se pusiera la velocidad el primer frame,
+// la friccion y la aceleracion del motor se la comerian a continuacion y el dash
+// duraria nada. Por eso es un temporizador: durante 0,2 segundos se vuelve a poner
+// la velocidad cada frame.
+//
+// El tope de 500 y no el general de 640: el dash es para salir de un apuro, no para
+// vaciar el mapa. Y como el tope general se aplica al final del frame, el dash
+// tampoco lo pasa.
+#define DIREKT_DASH_VELOCIDAD 500
+#define DIREKT_DASH_TIEMPO 0.2
+
+float	direkt_dash_hasta;		// hasta que momento dura el empujon
+float	direkt_dash_aviso;
+
+// La direccion horizontal a la que mira. Se calcula con makevectors, que deja
+// v_forward; se le quita el z para que el dash noakerecte en vertical.
+vector	direkt_mira;
+
+void()	direkt_dash;
+
+void() direkt_dash =
+{
+	local float restante;
+
+	// El dash solo en el aire y con el modificador. En el suelo no: para eso esta
+	// el deslizamiento, que es lo mismo pero mas lento y mas largo.
+	if (!direkt_pulsada_mod() || direkt_piso())
+		return;
+
+	restante = direkt_dash_hasta - time;
+
+	if (restante <= 0)
+		return;
+
+	makevectors(self.v_angle);
+	direkt_mira = v_forward;
+	direkt_mira_z = 0;
+
+	// Si mira casi recto hacia arriba o hacia abajo no hay direccion horizontal y
+	// el dash no tiene sentido: mejor no hacer nada raro.
+	if (vlen(direkt_mira) < 0.1)
+		return;
+
+	direkt_mira = direkt_mira * (1 / vlen(direkt_mira));
+
+	self.velocity_x = direkt_vx(direkt_mira) * DIREKT_DASH_VELOCIDAD;
+	self.velocity_y = direkt_vy(direkt_mira) * DIREKT_DASH_VELOCIDAD;
+
+	if (!direkt_dash_aviso)
+	{
+		direkt_dash_aviso = 1;
+		localcmd(" echo DIREKT: dash");
+	}
+};
+
+// El dash arranca cuando el modificador se pulsa en el aire. Va en su propia funcion
+// porque tiene que mirarse en un momento concreto (el flanco de la tecla), no cada
+// frame.
+// El dash se rearma al tocar el suelo.
+//
+// Si solo outletse en el flanco de la tecla, con Shift mantenido solo saldria una
+// vez: el jugador tendria que soltar y volver a pulsar para cada dash, que es lo
+// contrario de lo ergonomicо en un juego donde esa tecla ya es "corre".
+float	direkt_dash_listo;
+
+void() direkt_dash_arranca =
+{
+	if (!direkt_pulsada_mod())
+	{
+		direkt_dash_aviso = 0;
+		direkt_dash_listo = 1;
+		return;
+	}
+
+	// En el suelo no hay dash, pero se rearma para el proximo vuelo.
+	if (direkt_piso())
+	{
+		direkt_dash_listo = 1;
+		return;
+	}
+
+	if (!direkt_dash_listo)
+		return;
+
+	direkt_dash_listo = 0;
+	direkt_dash_hasta = time + DIREKT_DASH_TIEMPO;
+	direkt_dash();
+};
+
+// ------------------------------------------------------------------ planeo
+//
+// Que es
+//
+// Caer despacio. Con el Shift mientras se cae, la gravedad del jugador baja a una
+// fraccion y la velocidad de caida se recorta, asi que se baja flotando en vez de
+// irse al suelo.
+//
+// Se hace bajando el campo "gravity" de la entidad y no recortando la velocidad, que
+// es lo que haria el motor por su cuenta. La razon esta en sv_phys.c:
+//
+//	SV_AddGravity:  velocity[2] -= ent_gravity * sv_gravity.value * frametime
+//
+// o sea que gravity es un multiplicador POR ENTIDAD y lo pone el juego (client.qc lo
+// deja a 1). Bajandolo se frena la caida de verdad, con lo cual el salto sigue
+// funcionando igual y el jugador sigue teniendo control.
+//
+// Y se recorta tambien la velocidad de caida, porque con la gravedad sola el
+// jugador seguiria acelerando y en un segundo largo estaria going a 800.
+#define DIREKT_PLANEO_GRAVEDAD 0.2
+#define DIREKT_PLANEO_CAIDA 200
+
+float	direkt_planeo_aviso;
+
+// Lo mas rapido que se ha caido con planeo puesto. Va al informe de movimiento: si
+// el recorte funciona, nunca pasa de 200, y eso es justo lo que se comprueba desde
+// fuera. Sin esto no hay forma de distinguir "el planeo frena la caida" de "el
+// planeo esta puesto pero no frena nada".
+float	direkt_planeo_max_caida;
+
+void() direkt_planeo_registro =
+{
+	if (self.deadflag || direkt_piso() || !direkt_pulsada_mod())
+		return;
+
+	if (self.velocity_z < direkt_planeo_max_caida)
+		direkt_planeo_max_caida = self.velocity_z;
+};
+
+void() direkt_planeo =
+{
+	// El planeo es lo unico que se queda: si se suelta la tecla se acaba, y eso
+	// siempre. Lo demas (dash, wall run) tienen su propia duracion.
+	self.gravity = DIREKT_GRAVITY_SCALE;
+
+	if (!direkt_pulsada_mod() || direkt_piso())
+		return;
+
+	// Solo mientras se cae. Subiendo no hay nada que frenar.
+	if (self.velocity_z >= 0)
+		return;
+
+	if (!direkt_planeo_aviso)
+	{
+		direkt_planeo_aviso = 1;
+		localcmd(" echo DIREKT: planeo");
+	}
+
+	self.gravity = DIREKT_PLANEO_GRAVEDAD;
+	direkt_planeo_registro();
+
+	if (self.velocity_z < -DIREKT_PLANEO_CAIDA)
+	{
+		// Aviso de que el recorte esta funcionando de verdad: si este mensaje sale,
+		// el jugador iba a caer mas rapido de lo permitido y el tope lo ha parado.
+		localcmd(" echo DIREKT: planeo frenando la caida");
+		self.velocity_z = -DIREKT_PLANEO_CAIDA;
+	}
+};
+
+// ------------------------------------------------------------------ salto contra
+// la pared
+//
+// Que es
+//
+// En el aire, con el modificador y con una pared delante, saltar hacia ella y salir
+// despedido hacia el lado contrario. Es lo que permite subir por un hueco cerrado.
+//
+// El empujon va en la direccion CONTRARIA a la cara que se ha tocado, que es la
+// normal que devuelve el traceline. No vale "hacia donde mira el jugador": si te
+// Salta a una pared de lado, el empujon tiene que salir perpendicular a ella.
+//
+// Como se decide que hay pared delante
+//
+// Se lanza un rayo corto en la direccion a la que mira el jugador y se mira que
+// para antes de llegar. Ademas, de las dos paredes que hay a los lados se coge la
+// que este mas cerca, para que un salto hacia una esquina salga por el lado que mas
+// cerca esta.
+#define DIREKT_PARED_SALTO 350
+
+// Declaradas aqui y no junto a la carrera por la pared porque el salto contra la
+// pared la usa: QuakeC no admite usar una variable global antes de declararla.
+float	direkt_muro_tiempo;		// hasta que momento dura la carrera
+float	direkt_carrera_muro_activa;
+float	direkt_muro_aviso;
+float	direkt_muro_fin;			// cuando se acaba, para no repetir el aviso
+float	direkt_salto_pared_aviso;
+
+void()	direkt_salto_pared;
+
+void() direkt_salto_pared =
+{
+	local vector suelo;
+	local float distancia;
+	local float nx, ny;
+
+	// Solo en el aire, con el modificador y sin estar ya en un muro.
+	if (direkt_piso() || !direkt_pulsada_mod())
+		return;
+	if (!self.button2 || direkt_dash_hasta > time)
+		return;
+	if (direkt_muro_tiempo > time)
+		return;
+
+	makevectors(self.v_angle);
+	direkt_mira = v_forward;
+	direkt_mira_z = 0;
+
+	// Mirando al techo o al suelo no hay direccion horizontal: no hay salto contra
+	// la pared.
+	if (vlen(direkt_mira) < 0.1)
+		return;
+	direkt_mira = direkt_mira * (1 / vlen(direkt_mira));
+
+	distancia = direkt_pared(direkt_mira);
+	if (distancia <= 0)
+		return;
+
+	// La normal de la cara tocada. Sale hacia el jugador, asi que el empujon va
+	// para el lado contrario, con su signo cambiado.
+	nx = direkt_pared_x();
+	ny = direkt_pared_y();
+
+	// La normal tiene que ser de pared, no del suelo. Una normal de pared es
+	// horizontal, asi que su z vale cero.
+	if (direkt_pared_z() > 0.3 || direkt_pared_z() < -0.3)
+		return;
+
+	suelo = self.velocity;
+	suelo_z = 0;
+
+	self.velocity_x = suelo_x - nx * DIREKT_PARED_SALTO;
+	self.velocity_y = suelo_y - ny * DIREKT_PARED_SALTO;
+	self.velocity_z = DIREKT_SALTO_VELOCIDAD;
+
+	// El salto normal no lo repita en el mismo frame.
+	direkt_salto_boton = 1;
+
+	// Y una grabbed de gracia para que no se pegue a la pared.
+	direkt_muro_tiempo = time + 0.2;
+
+	if (!direkt_salto_pared_aviso)
+	{
+		direkt_salto_pared_aviso = 1;
+		localcmd(" echo DIREKT: salto contra la pared");
+	}
+};
+
+// ------------------------------------------------------------------ carrera por
+// la pared
+//
+// Que es
+//
+// En el aire, con el modificador y con una pared al lado, pegarse a ella y seguir
+// hacia delante sin caerse. Dura un tiempo limitado: en una pared infinita se
+// podria ir muy lejos, y el juego tiene un tope de 640 de velocidad.
+//
+// El pegado es un empujito HACIA la pared (no away), y es lo que compensa el roce
+// del motor: SV_WallFriction (sv_phys.c) castiga el movimiento hacia la pared y
+// recorta la velocidad tangencial. Sin empujarla hacia dentro, la carrera se frena
+// en un segundo y medio.
+#define DIREKT_MURO_TIEMPO 1.5
+#define DIREKT_MURO_VELOCIDAD 400
+#define DIREKT_MURO_EMPUJE 180
+#define DIREKT_MURO_ESCALADA 60
+
+void()	direkt_carrera_muro;
+
+void() direkt_carrera_muro =
+{
+	local vector suelo;
+	local vector normal;
+	local float izquierda;
+	local float derecha;
+	local float distancia;
+	local float nx, ny;
+
+	// El aviso de "se acaba" va antes de los-return, para que salga tanto si se
+	// acaba por tiempo como porque el jugador ha aterrizado o ha soltado la tecla.
+	if (direkt_muro_tiempo && time > direkt_muro_tiempo && time < direkt_muro_fin)
+	{
+		direkt_muro_tiempo = 0;
+		localcmd(" echo DIREKT: se acaba la carrera por la pared");
+	}
+
+	direkt_carrera_muro_activa = 0;
+
+	// Solo en el aire y con el modificador.
+	if (direkt_piso() || !direkt_pulsada_mod())
+		return;
+
+	// OJO: con el boton de salto pulsado la carrera sigue. Antes se cortaba, y era
+	// un error de舒适idad: junto a una pared, mantener Shift ya pega al jugador al
+	// muro, y el boton de salto es justamente lo que uno pulsa para salirse de el.
+	// El salto contra la pared se mira ANTES que esto, asi que el jugador sale
+	// despedido y no se queda pegado.
+
+	makevectors(self.v_angle);
+	suelo = v_right;
+	suelo_z = 0;
+
+	// Mirando al techo o al suelo no hay lado.
+	if (vlen(suelo) < 0.1)
+		return;
+	suelo = suelo * (1 / vlen(suelo));
+
+	distancia = direkt_muro_cerca();
+	normal = direkt_muro_cerca_normal;
+
+	nx = direkt_vx(normal);
+	ny = direkt_vy(normal);
+
+	// El empujito HACIA la pared, que es lo que compensa el roce del motor
+	// (SV_WallFriction castiga el movimiento hacia la pared). El signo de la normal
+	// ya apunta hacia ella.
+	self.velocity_x = self.velocity_x + nx * DIREKT_MURO_EMPUJE;
+	self.velocity_y = self.velocity_y + ny * DIREKT_MURO_EMPUJE;
+
+	// Y la velocidad hacia delante, para que la carrera arranque de verdad.
+	makevectors(self.v_angle);
+	direkt_mira = v_forward;
+	direkt_mira_z = 0;
+	if (vlen(direkt_mira) > 0.1)
+	{
+		direkt_mira = direkt_mira * (1 / vlen(direkt_mira));
+		self.velocity_x = direkt_vx(direkt_mira) * DIREKT_MURO_VELOCIDAD;
+		self.velocity_y = direkt_vy(direkt_mira) * DIREKT_MURO_VELOCIDAD;
+	}
+
+	// La pared sostiene al jugador: mientras dura la carrera, no se cae.
+	if (self.velocity_z < 0)
+		self.velocity_z = DIREKT_MURO_ESCALADA;
+
+	direkt_carrera_muro_activa = 1;
+
+	if (!direkt_muro_aviso)
+	{
+		direkt_muro_aviso = 1;
+		direkt_muro_fin = time + 3;
+		localcmd(" echo DIREKT: carrera por la pared");
+	}
+};
+
