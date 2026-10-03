@@ -259,6 +259,7 @@ assets:
 		--salida $(DATOS)/id1/pak0.pak \
 		progs/gibhead.mdl:$(DATOS)/id1/progs/gibhead.mdl
 	@if [ -d $(ASSETS) ]; then cp -a $(ASSETS)/. $(DATOS)/id1/ 2>/dev/null || true; fi
+	@$(PYTHON) $(REPO)/tools/musica-nombres.py $(DATOS)/id1/music
 	@$(PYTHON) $(REPO)/tools/mpak.py --listar $(DATOS)/id1/pak0.pak >/dev/null
 	@echo "    ok: $(DATOS)/id1 (pak0 nuestro, pak1 y pak2 de LibreQuake)"
 

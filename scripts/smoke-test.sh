@@ -452,9 +452,27 @@ if "$REPO_ROOT/scripts/run-headless.sh" --map "$MUSICA_MAP" --settle 4 \
     echo "        log: $LOGS/run-$MUSICA_MAP.log" >&2
   fi
 
-  # El mapa pide track05.ogg. El motor tiene que acabar intentar abrir ese
+  # Los ficheros tienen que llamarse por el escenario, no trackNN. Quedarse con
+  # los nombres viejos seria volver al orden que se queria quitar.
+  _viejos="$(grep -cE '^ +[0-9]+ +music/track[0-9]+' \
+             "$LOGS/run-$MUSICA_MAP.log" || true)"
+  if ((_viejos == 0)); then
+    ok "las pistas se llaman por el escenario y no trackNN"
+  else
+    ko "quedan $_viejos pistas con el nombre viejo trackNN"
+  fi
+
+  # Y la tabla que traduce el numero viejo al nombre tiene que estar puesta.
+  if [[ -f "$BUILD/datos/id1/music/pistas.txt" ]] \
+     && grep -q "feudal_anomaly.ogg" "$BUILD/datos/id1/music/pistas.txt"; then
+    ok "music/pistas.txt relaciona el numero viejo con el nombre nuevo"
+  else
+    ko "music/pistas.txt falta o no relaciona los nombres"
+  fi
+
+  # El mapa pide gloomliths.ogg. El motor tiene que acabar intentando abrir ese
   # fichero concreto, no "music/trackNN" inventado ni el numero.
-  if grep -q "music/track05.ogg" "$LOGS/run-$MUSICA_MAP.log"; then
+  if grep -q "music/gloomliths.ogg" "$LOGS/run-$MUSICA_MAP.log"; then
     ok "el mundospawn \"music\" se resuelve al fichero pedido"
   else
     ko "el mundospawn \"music\" no llega al fichero pedido"
@@ -479,6 +497,28 @@ else
   tail -10 "$BUILD/musica-numero.out" >&2
 fi
 
+# Los ficheros se llaman por el escenario, pero los mapas de LibreQuake ponen un
+# numero. La tabla music/pistas.txt traduce uno por otro, asi que "sounds" 5 tiene
+# que acabar abriendo feudal_anomaly.ogg (la pista 5 de LibreQuake).
+#
+# No se puede comprobar oyendolo con el sonido apagado: BGM_PlayCDtrack se sale
+# antes de llegar al puente cuando no hay CD ni decodificador. Lo que se comprueba
+# es que el motor lea la tabla y sepa que el 5 es feudal_anomaly, que es
+# exactamente lo que consulta el puente.
+if "$REPO_ROOT/scripts/run-headless.sh" --map "$MUSICA_NUMERO_MAP" --settle 4 \
+     --min-lit 0 --cfg-line 'bgm_catalogo tabla' \
+     >"$BUILD/musica-puente.out" 2>&1; then
+  if grep -qE '^ +5 +feudal_anomaly\.ogg' "$LOGS/run-$MUSICA_NUMERO_MAP.log"; then
+    ok "el motor lee music/pistas.txt y relaciona el 5 con feudal_anomaly"
+  else
+    ko "el motor no leo bien music/pistas.txt"
+    grep -A12 "Tabla de pistas" "$LOGS/run-$MUSICA_NUMERO_MAP.log" | head -12 >&2
+  fi
+else
+  ko "el motor no arranco al probar la tabla de pistas"
+  tail -10 "$BUILD/musica-puente.out" >&2
+fi
+
 # Pista que no existe: el motor lo dice y ademas sigue por el numero, con lo
 # cual el mapa no se queda mudo.
 if "$REPO_ROOT/scripts/run-headless.sh" --map "$MUSICA_FALTA_MAP" --settle 4 \
@@ -493,6 +533,13 @@ else
   ko "el motor no arranco con el mapa de musica inexistente"
   tail -10 "$BUILD/musica-falta.out" >&2
 fi
+
+# Los tres mapas de esta seccion se compilan dentro de build/datos para que el
+# motor los encuentre, y ahi se acabarian en el paquete portable. Se borran
+# despues de probarlos, que es lo que se lleva uno.
+for _m in "$MUSICA_MAP" "$MUSICA_NUMERO_MAP" "$MUSICA_FALTA_MAP"; do
+  rm -f "$BUILD/datos/id1/maps/$_m.bsp"
+done
 
 head_ "Resultado"
 printf '  %d pasan, %d fallan\n\n' "$pass" "$fail"

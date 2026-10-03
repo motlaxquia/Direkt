@@ -7,7 +7,7 @@
 {
 "classname" "worldspawn"
 "wad" "gfx.wad"
-"music" "track05.ogg"
+"music" "gloomliths.ogg"
 {
 ( 64 0 0 )( 64 64 0 )( 64 64 64 )( 64 0 64 ) wall1
 ( 0 0 0 )( 0 0 64 )( 0 64 64 )( 0 64 0 ) wall1

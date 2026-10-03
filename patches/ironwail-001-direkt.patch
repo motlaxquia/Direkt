@@ -37,7 +37,7 @@
 #   * El parche se genera contra el ORIGINAL, no contra el arbol ya parcheado.
 #     Si no, el diff incluye los cambios del parche anterior dos veces.
 --- a/CMakeLists.txt	origen
-+++ b/CMakeLists.txt	2026-10-03 18:15:04.000000000 +0000
++++ b/CMakeLists.txt	2026-10-03 18:54:23.000000000 +0000
 @@ -61,7 +61,39 @@
  endif()
  
@@ -80,8 +80,16 @@
  	set(ENABLE_USERDIRS TRUE CACHE STRING "Enable user directories")
  elseif (WIN32)
 --- a/Quake/bgmusic.c	origen
-+++ b/Quake/bgmusic.c	2026-10-03 18:15:04.000000000 +0000
-@@ -145,6 +145,7 @@
++++ b/Quake/bgmusic.c	2026-10-03 18:54:23.000000000 +0000
+@@ -27,7 +27,6 @@
+ #include "snd_codeci.h"
+ #include "bgmusic.h"
+ 
+-#define MUSIC_DIRNAME	"music"
+ 
+ qboolean	bgmloop;
+ cvar_t		bgm_extmusic = {"bgm_extmusic", "1", CVAR_ARCHIVE};
+@@ -145,6 +144,7 @@
  
  	Cvar_RegisterVariable(&bgm_extmusic);
  	Cmd_AddCommand("music", BGM_Play_f);
@@ -89,7 +97,7 @@
  	Cmd_AddCommand("music_pause", BGM_Pause_f);
  	Cmd_AddCommand("music_resume", BGM_Resume_f);
  	Cmd_AddCommand("music_loop", BGM_Loop_f);
-@@ -293,6 +294,302 @@
+@@ -293,6 +293,467 @@
  	Con_Printf("Couldn't handle music file %s\n", filename);
  }
  
@@ -202,7 +210,9 @@
 +		for (i = 0; bgm_catalogo_exts[i] && total < BGM_CATALOGO_MAX; i++)
 +		{
 +			findfile_t *find;
-+			char ruta[MAX_OSPATH];
++			// +16 para "/music" y el final. Sin esto el compilador avisa de que
++			// un directorio larguisimo podria cortar la ruta.
++			char ruta[MAX_OSPATH + 16];
 +
 +			snprintf (ruta, sizeof (ruta), "%s/%s", s->filename, MUSIC_DIRNAME);
 +			if (!(find = Sys_FindFirst (ruta, bgm_catalogo_exts[i] + 1)))
@@ -222,7 +232,7 @@
 +					break;
 +				}
 +				nombres[total++] = Z_Malloc (MAX_QPATH);
-+				snprintf (nombres[total-1], MAX_QPATH, "%s/%s",
++				snprintf (nombres[total-1], MAX_QPATH, "%s/%.48s",
 +						MUSIC_DIRNAME, find->name);
 +			}
 +			while (Sys_FindNext (find));
@@ -371,12 +381,175 @@
 +que mirar para saber que nombre poner en la clave "music" de un mapa.
 +================================================================================
 +*/
++/*
++================================================================================
++TABLA DE PISTAS (music/pistas.txt)
++================================================================================
++Los ficheros de musica se llaman por el escenario donde suenan: calibur.ogg,
++dismal_shores.ogg... y no track04.ogg. Los mapas de LibreQuake, en cambio, ponen
++la clave "sounds" con un numero entero, y sus .bsp viven dentro de los PAK: para
++cambiarlos habria que desempaquetar 95 MB de mapas en cada compilacion y ademas
++estariamos tocando datos de otra gente.
++
++La tabla music/pistas.txt traduce el numero viejo al nombre actual:
++
++    4        calibur.ogg              e1m8 That's my Ex, Calibur!
++
++ asi que un mapa con "sounds" 4 sigue sonando lo mismo de siempre, sin tocar el
++ mapa. La tabla la escribe tools/musica-nombres.py y se puede editar a mano: para
++ cambiar el reparto, cambiar la linea.
++
++La tabla solo se mira si no hay ningun fichero trackNN. Si alguien deja los
++ nombres viejos, mandan ellos.
++================================================================================
++*/
++
++#define BGM_PISTAS_MAX 128
++
++static struct {
++	int	numero;
++	char	nombre[MAX_QPATH];
++} bgm_pistas[BGM_PISTAS_MAX];
++
++static int bgm_pistas_n = -1;		// -1 = sin leer todavia
++
++/*
++================================================================================
++BGM_PistasCargar
++================================================================================
++Lee music/pistas.txt. Se lee una vez y se queda en memoria; el fichero son un
++par de lineas y no cambia mientras juegas.
++================================================================================
++*/
++static void BGM_PistasCargar (void)
++{
++	char	ruta[MAX_QPATH];
++	byte	*buf;
++	int		len;
++	char	*linea;
++
++	bgm_pistas_n = 0;
++
++	q_snprintf (ruta, sizeof (ruta), "%s/%s", MUSIC_DIRNAME, BGM_PISTAS_TABLA);
++	buf = COM_LoadHunkFile (ruta, NULL);
++	if (!buf)
++		return;		// no hay tabla: los numeros viejos seguiran sin encontrar nada
++
++	// COM_LoadHunkFile deja el texto con un 0 al final.
++	linea = (char *)buf;
++	while (*linea && bgm_pistas_n < BGM_PISTAS_MAX)
++	{
++		char	*fin;
++		int		numero;
++		int		largo;
++
++		// Al principio de linea: se quitan los espacios deien el lacio.
++		while (*linea == ' ' || *linea == '\t')
++			linea++;
++
++		if (*linea == '#' || *linea == '\n' || *linea == '\r' || !*linea)
++		{
++			/*
++			 * Comentario o linea vacia: se salta hasta el fin de la linea Y se
++			 * pasa el '\n'. Sin ese paso, al principio de la vuelta siguiente *linea
++			 * sigue siendo el '\n' y el bucle no avanza nunca: el motor se queda
++			 * colgado aqui para siempre.
++			 */
++			while (*linea && *linea != '\n')
++				linea++;
++			if (*linea == '\n')
++				linea++;
++			continue;
++		}
++
++		numero = atoi (linea);
++
++		// Del numero al nombre.
++		while (*linea == ' ' || *linea == '\t')
++			linea++;
++		while (*linea >= '0' && *linea <= '9')
++			linea++;
++		while (*linea == ' ' || *linea == '\t')
++			linea++;
++
++		// El nombre va hasta el fin de linea, sin el final de linea ni el 0.
++		fin = linea;
++		while (*fin && *fin != '\n' && *fin != '\r')
++			fin++;
++		largo = fin - linea;
++		while (largo > 0 && (linea[largo-1] == ' ' || linea[largo-1] == '\t'))
++			largo--;
++
++		if (numero > 0 && largo > 0)
++		{
++			if (largo >= (int)sizeof (bgm_pistas[0].nombre))
++				largo = sizeof (bgm_pistas[0].nombre) - 1;
++			memcpy (bgm_pistas[bgm_pistas_n].nombre, linea, largo);
++			bgm_pistas[bgm_pistas_n].nombre[largo] = 0;
++			bgm_pistas[bgm_pistas_n].numero = numero;
++			bgm_pistas_n++;
++		}
++
++		linea = fin;
++	}
++}
++
++/*
++================================================================================
++BGM_PistaVieja
++================================================================================
++Devuelve la ruta del fichero al que apunta un numero de pista viejo, o NULL.
++================================================================================
++*/
++static const char *BGM_PistaVieja (int numero)
++{
++	static char completo[MAX_QPATH];
++	int	i;
++
++	if (bgm_pistas_n < 0)
++		BGM_PistasCargar();
++
++	for (i = 0; i < bgm_pistas_n; i++)
++	{
++		if (bgm_pistas[i].numero != numero)
++			continue;
++		q_snprintf (completo, sizeof (completo), "%s/%s", MUSIC_DIRNAME,
++				bgm_pistas[i].nombre);
++		return completo;
++	}
++
++	return NULL;
++}
++
 +void BGM_CatalogoListar (void)
 +{
 +	int	i;
 +
++	// "bgm_catalogo tabla" escribe la otra lista, la que traduce el numero viejo
++	// de pista al nombre del fichero. Es lo que hay que mirar cuando un mapa con
++	// "sounds" no suena lo que deberia.
++	if (!strcmp (Cmd_Argv (1), "tabla"))
++	{
++		if (bgm_pistas_n < 0)
++			BGM_PistasCargar ();
++
++		if (bgm_pistas_n <= 0)
++		{
++			Con_Printf ("No hay tabla en %s/%s\n", MUSIC_DIRNAME,
++					BGM_PISTAS_TABLA);
++			return;
++		}
++
++		Con_Printf ("Tabla de pistas (%s/%s):\n", MUSIC_DIRNAME,
++				BGM_PISTAS_TABLA);
++		for (i = 0; i < bgm_pistas_n; i++)
++			Con_Printf ("  %3d  %s\n", bgm_pistas[i].numero,
++					bgm_pistas[i].nombre);
++		return;
++	}
++
 +	if (bgm_catalogo_n < 0)
-+		BGM_CatalogoConstruir();
++		BGM_CatalogoConstruir ();
 +
 +	if (bgm_catalogo_n <= 0)
 +	{
@@ -392,9 +565,39 @@
  void BGM_PlayCDtrack (byte track, qboolean looping)
  {
  /* instead of searching by the order of music_handlers, do so by
+@@ -352,7 +813,28 @@
+ 		handler = handler->next;
+ 	}
+ 	if (ext == NULL)
+-		Con_Printf("Couldn't find a cdrip for track %d\n", (int)track);
++	{
++		/*
++		 * Direkt: no hay ningun trackNN, pero la tabla music/pistas.txt puede
++		 * decir a que fichero corresponde ese numero, porque los ficheros se
++		 * llaman por el escenario. Si lo dice, se suena ese y no se avisa de nada,
++		 * porque para el mapa es la pista de siempre.
++		 */
++		const char *fichero = BGM_PistaVieja ((int)track);
++
++		if (fichero)
++		{
++			bgmstream = S_CodecOpenStreamAny (fichero, looping);
++			if (bgmstream)
++				Con_Printf ("Musica del mapa: %s (pista %d)\n",
++						fichero, (int)track);
++			else
++				Con_Printf ("No se pudo abrir %s, la pista %d\n",
++						fichero, (int)track);
++		}
++		else
++			Con_Printf("Couldn't find a cdrip for track %d\n", (int)track);
++	}
+ 	else
+ 	{
+ 		q_snprintf(tmp, sizeof(tmp), "%s/track%02d.%s",
 --- a/Quake/bgmusic.h	origen
-+++ b/Quake/bgmusic.h	2026-10-03 18:15:04.000000000 +0000
-@@ -39,5 +39,21 @@
++++ b/Quake/bgmusic.h	2026-10-03 18:54:23.000000000 +0000
+@@ -39,5 +39,28 @@
  
  void BGM_PlayCDtrack (byte track, qboolean looping);
  
@@ -408,6 +611,13 @@
 +// primero es un indice del catalogo y no un numero de track.
 +#define BGM_INDICE_MARCADOR	255
 +
++// La tabla que traduce el numero viejo de pista al nombre del fichero.
++#define BGM_PISTAS_TABLA	"pistas.txt"
++
++// La carpeta donde se buscan las pistas. La necesita tambien sv_main.c para
++// avisar de que una pista pedida por nombre no esta.
++#define MUSIC_DIRNAME	"music"
++
 +void BGM_CatalogoConstruir (void);
 +void BGM_CatalogoListar (void);
 +int  BGM_CatalogoIndice (const char *pedido);
@@ -417,7 +627,7 @@
  #endif	/* _BGMUSIC_H_ */
  
 --- a/Quake/cl_parse.c	origen
-+++ b/Quake/cl_parse.c	2026-10-03 18:15:04.000000000 +0000
++++ b/Quake/cl_parse.c	2026-10-03 18:54:23.000000000 +0000
 @@ -1302,7 +1302,12 @@
  		case svc_cdtrack:
  			cl.cdtrack = MSG_ReadByte ();
@@ -433,7 +643,7 @@
  			else
  				BGM_PlayCDtrack ((byte)cl.cdtrack, true);
 --- a/Quake/cvar.c	origen
-+++ b/Quake/cvar.c	2026-10-03 18:15:04.000000000 +0000
++++ b/Quake/cvar.c	2026-10-03 18:54:23.000000000 +0000
 @@ -272,6 +272,29 @@
  ============
  */
@@ -475,7 +685,7 @@
  
  //==============================================================================
 --- a/Quake/cvar.h	origen
-+++ b/Quake/cvar.h	2026-10-03 18:15:04.000000000 +0000
++++ b/Quake/cvar.h	2026-10-03 18:54:23.000000000 +0000
 @@ -41,6 +41,8 @@
  init function before any console commands are executed:
  
@@ -486,7 +696,7 @@
  
  C code usually just references a cvar in place:
 --- a/Quake/gl_screen.c	origen
-+++ b/Quake/gl_screen.c	2026-10-03 18:15:04.000000000 +0000
++++ b/Quake/gl_screen.c	2026-10-03 18:54:23.000000000 +0000
 @@ -486,6 +486,8 @@
  Internal use only
  =================
@@ -513,7 +723,7 @@
  	else if (size >= 110)
  		sb_lines = 24 * scale;
 --- a/Quake/main_sdl.c	origen
-+++ b/Quake/main_sdl.c	2026-10-03 18:15:04.000000000 +0000
++++ b/Quake/main_sdl.c	2026-10-03 18:54:23.000000000 +0000
 @@ -120,7 +120,16 @@
  
  // On OS X we call SDL_main from the launcher, but SDL2 doesn't redefine main
@@ -533,7 +743,7 @@
  #endif
  
 --- a/Quake/pr_edict.c	origen
-+++ b/Quake/pr_edict.c	2026-10-03 18:15:04.000000000 +0000
++++ b/Quake/pr_edict.c	2026-10-03 18:54:23.000000000 +0000
 @@ -1387,6 +1387,21 @@
  		if (keyname[0] == '_')
  			continue;
@@ -557,7 +767,7 @@
  		if (!strcmp(keyname, "alpha"))
  			ent->alpha = ENTALPHA_ENCODE(Q_atof(com_token));
 --- a/Quake/sbar.c	origen
-+++ b/Quake/sbar.c	2026-10-03 18:15:04.000000000 +0000
++++ b/Quake/sbar.c	2026-10-03 18:54:23.000000000 +0000
 @@ -1605,6 +1605,56 @@
  Sbar_Draw
  ===============
@@ -631,7 +841,7 @@
  		return;		// console is full screen
  
 --- a/Quake/server.h	origen
-+++ b/Quake/server.h	2026-10-03 18:15:04.000000000 +0000
++++ b/Quake/server.h	2026-10-03 18:54:23.000000000 +0000
 @@ -307,4 +307,9 @@
  void SV_SaveSpawnparms (void);
  void SV_SpawnServer (const char *server);
@@ -643,7 +853,7 @@
 +
  #endif	/* QUAKE_SERVER_H */
 --- a/Quake/sv_main.c	origen
-+++ b/Quake/sv_main.c	2026-10-03 18:15:04.000000000 +0000
++++ b/Quake/sv_main.c	2026-10-03 18:54:23.000000000 +0000
 @@ -23,10 +23,15 @@
  // sv_main.c -- server main program
  
@@ -694,7 +904,7 @@
  // set view
  	MSG_WriteByte (&client->message, svc_setview);
 --- a/Quake/view.c	origen
-+++ b/Quake/view.c	2026-10-03 18:15:04.000000000 +0000
++++ b/Quake/view.c	2026-10-03 18:54:23.000000000 +0000
 @@ -714,6 +714,7 @@
  	side = V_CalcRoll (cl_entities[cl.viewentity].angles, cl.velocity);
  	r_refdef.viewangles[ROLL] += side;

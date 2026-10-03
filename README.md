@@ -257,14 +257,56 @@ Direkt admite además el nombre del fichero:
 "music" "bosque.ogg"        // el motor busca ese fichero en music/
 ```
 
-Da igual dónde esté el fichero y da igual cómo se llame: `track02`, `bosque` o
-`nivel1_marcha`. También vale sin extensión (`"music" "bosque"`), y entonces
+Da igual dónde esté el fichero. Los de LibreQuake se llaman por su escenario
+(`gloomliths.ogg`), y los tuyos como quieras: `bosque`, `nivel1_marcha`... También vale sin extensión (`"music" "bosque"`), y entonces
 suena la primera que encaje.
 
 Las dos formas conviven. Un mapa con `"sounds"` sigue yendo exactamente por su
 camino de antes, byte a byte: el servidor manda el número y el motor lo monta
 igual que siempre. Para que no se pisen, el segundo byte que ya viajaba en
 `svc_cdtrack` dice cuál de las dos es.
+
+### Los ficheros se llaman por el escenario
+
+Las pistas no se llaman `track04.ogg`, sino por el sitio donde suenan. El nombre
+es el del primer mapa que usa esa pista en el orden de la campaña (e1, e2, e3,
+e4, e0, y después los `lqdm`, que son de muerte):
+
+| numero | fichero                  | escenario                  | mapas que la usan |
+|-------:|--------------------------|----------------------------|-------------------|
+| 2      | `reservada_02.ogg`       | sin mapa                   | — |
+| 3      | `reservada_03.ogg`       | sin mapa                   | — |
+| 4      | `calibur.ogg`            | e1m8 That's my Ex, Calibur! | e1m8, e2m2, e2m5, e3m3 |
+| 5      | `feudal_anomaly.ogg`     | e1m2 The Feudal Anomaly    | e1m2, e1m3, e0m3, e0m8, lqdm2 |
+| 6      | `rats_behind_bars.ogg`   | e1m1 Rats Behind Bars      | e1m1, e0m1, e3m1, e4m1 |
+| 7      | `dismal_shores.ogg`      | e1m4 Dismal Shores         | e1m4, e1m7, e0m7, e4m4, lqdm7, lqdm10 |
+| 8      | `corpse_army.ogg`        | e2m3 Corpse army           | e2m3, e3m2, e3m4, lqdm1, lqdm3, lqdm9, lqdm12 |
+| 9      | `gloomliths.ogg`         | e1m5 Gloomliths            | e1m5, e0m2, lqdm4 |
+| 10     | `holy_bloated_corpse.ogg`| e3m6 Holy Bloated Corpse   | e3m6, e4m3, e4m5, e0m4, e0m6, lqdm6 |
+| 11     | `feint_free_funtime.ogg` | e0m4 Feint-free funtime    | e0m4, lqdm5, lqdm8 |
+
+Cada pista se usa en varios mapas, así que no hay un único sitio suyo: por eso el
+nombre es el del primero y la tabla guarda todos. Para cambiar el reparto,
+edita `music/pistas.txt`, que se puede leer a mano.
+
+Los mapas de LibreQuake ponen `"sounds"` con un número y sus `.bsp` viven dentro
+de los PAK, así que `music/pistas.txt` es lo que traduce ese número al nombre
+nuevo:
+
+```
+4        calibur.ogg              e1m8 That's my Ex, Calibur! e1m8, e2m2, ...
+```
+
+Un mapa con `"sounds" 5` sigue sonando exactamente lo mismo de antes. La tabla
+solo se mira si no hay ningún `trackNN`: si alguien deja los nombres viejos,
+manda lo que haya.
+
+Para ver las dos listas dentro del juego:
+
+```
+bgm_catalogo             # las pistas que hay, ordenadas por nombre
+bgm_catalogo tabla       # el numero viejo de cada una y su fichero
+```
 
 Para ver qué hay y en qué orden, dentro del juego:
 
@@ -274,10 +316,9 @@ bgm_catalogo
 
 ```
 10 pistas en music/:
-    1  music/track02.ogg
-    2  music/track03.ogg
-    3  music/track04.ogg
-    4  music/track05.ogg
+    1  music/calibur.ogg
+    2  music/corpse_army.ogg
+    3  music/dismal_shores.ogg
     ...
 ```
 
