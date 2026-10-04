@@ -40,7 +40,7 @@
 #   * El parche se genera contra el ORIGINAL, no contra el arbol ya parcheado.
 #     Si no, el diff incluye los cambios del parche anterior dos veces.
 --- a/CMakeLists.txt	origen
-+++ b/CMakeLists.txt	2026-10-04 14:14:57.000000000 +0000
++++ b/CMakeLists.txt	2026-10-04 14:27:51.000000000 +0000
 @@ -61,7 +61,39 @@
  endif()
  
@@ -83,7 +83,7 @@
  	set(ENABLE_USERDIRS TRUE CACHE STRING "Enable user directories")
  elseif (WIN32)
 --- a/Quake/bgmusic.c	origen
-+++ b/Quake/bgmusic.c	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/bgmusic.c	2026-10-04 14:27:51.000000000 +0000
 @@ -27,7 +27,6 @@
  #include "snd_codeci.h"
  #include "bgmusic.h"
@@ -599,7 +599,7 @@
  	{
  		q_snprintf(tmp, sizeof(tmp), "%s/track%02d.%s",
 --- a/Quake/bgmusic.h	origen
-+++ b/Quake/bgmusic.h	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/bgmusic.h	2026-10-04 14:27:51.000000000 +0000
 @@ -39,5 +39,28 @@
  
  void BGM_PlayCDtrack (byte track, qboolean looping);
@@ -630,7 +630,7 @@
  #endif	/* _BGMUSIC_H_ */
  
 --- a/Quake/cl_input.c	origen
-+++ b/Quake/cl_input.c	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/cl_input.c	2026-10-04 14:27:51.000000000 +0000
 @@ -60,6 +60,11 @@
  
  int			in_impulse;
@@ -662,7 +662,7 @@
  	}
  
 --- a/Quake/cl_parse.c	origen
-+++ b/Quake/cl_parse.c	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/cl_parse.c	2026-10-04 14:27:51.000000000 +0000
 @@ -1302,7 +1302,12 @@
  		case svc_cdtrack:
  			cl.cdtrack = MSG_ReadByte ();
@@ -678,7 +678,7 @@
  			else
  				BGM_PlayCDtrack ((byte)cl.cdtrack, true);
 --- a/Quake/cvar.c	origen
-+++ b/Quake/cvar.c	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/cvar.c	2026-10-04 14:27:51.000000000 +0000
 @@ -272,6 +272,29 @@
  ============
  */
@@ -720,7 +720,7 @@
  
  //==============================================================================
 --- a/Quake/cvar.h	origen
-+++ b/Quake/cvar.h	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/cvar.h	2026-10-04 14:27:51.000000000 +0000
 @@ -41,6 +41,8 @@
  init function before any console commands are executed:
  
@@ -731,7 +731,7 @@
  
  C code usually just references a cvar in place:
 --- a/Quake/gl_screen.c	origen
-+++ b/Quake/gl_screen.c	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/gl_screen.c	2026-10-04 14:27:51.000000000 +0000
 @@ -486,6 +486,8 @@
  Internal use only
  =================
@@ -758,7 +758,7 @@
  	else if (size >= 110)
  		sb_lines = 24 * scale;
 --- a/Quake/keys.c	origen
-+++ b/Quake/keys.c	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/keys.c	2026-10-04 14:27:51.000000000 +0000
 @@ -653,6 +653,87 @@
  
  
@@ -856,7 +856,7 @@
  	{
  		if (keydown[i])
 --- a/Quake/keys.h	origen
-+++ b/Quake/keys.h	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/keys.h	2026-10-04 14:27:51.000000000 +0000
 @@ -236,7 +236,12 @@
  int Key_GetKeysForCommand (const char *command, int *keys, int maxkeys, keydevicemask_t devmask);
  qboolean Key_IsKeyGamepadAltModifier (int keynum);
@@ -871,7 +871,7 @@
  void Key_WriteBindings (FILE *f);
  
 --- a/Quake/main_sdl.c	origen
-+++ b/Quake/main_sdl.c	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/main_sdl.c	2026-10-04 14:27:51.000000000 +0000
 @@ -120,7 +120,16 @@
  
  // On OS X we call SDL_main from the launcher, but SDL2 doesn't redefine main
@@ -891,7 +891,7 @@
  #endif
  
 --- a/Quake/pr_edict.c	origen
-+++ b/Quake/pr_edict.c	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/pr_edict.c	2026-10-04 14:27:51.000000000 +0000
 @@ -1387,6 +1387,21 @@
  		if (keyname[0] == '_')
  			continue;
@@ -915,7 +915,7 @@
  		if (!strcmp(keyname, "alpha"))
  			ent->alpha = ENTALPHA_ENCODE(Q_atof(com_token));
 --- a/Quake/sbar.c	origen
-+++ b/Quake/sbar.c	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/sbar.c	2026-10-04 14:27:51.000000000 +0000
 @@ -1605,6 +1605,56 @@
  Sbar_Draw
  ===============
@@ -989,7 +989,7 @@
  		return;		// console is full screen
  
 --- a/Quake/server.h	origen
-+++ b/Quake/server.h	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/server.h	2026-10-04 14:27:51.000000000 +0000
 @@ -307,4 +307,9 @@
  void SV_SaveSpawnparms (void);
  void SV_SpawnServer (const char *server);
@@ -1001,7 +1001,7 @@
 +
  #endif	/* QUAKE_SERVER_H */
 --- a/Quake/sv_main.c	origen
-+++ b/Quake/sv_main.c	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/sv_main.c	2026-10-04 14:27:51.000000000 +0000
 @@ -23,10 +23,15 @@
  // sv_main.c -- server main program
  
@@ -1052,7 +1052,7 @@
  // set view
  	MSG_WriteByte (&client->message, svc_setview);
 --- a/Quake/view.c	origen
-+++ b/Quake/view.c	2026-10-04 14:14:57.000000000 +0000
++++ b/Quake/view.c	2026-10-04 14:27:51.000000000 +0000
 @@ -714,6 +714,7 @@
  	side = V_CalcRoll (cl_entities[cl.viewentity].angles, cl.velocity);
  	r_refdef.viewangles[ROLL] += side;
