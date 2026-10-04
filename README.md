@@ -306,6 +306,12 @@ Tres cosas de la estructura que conviene tener a mano:
   aplican solos en `make deps` y `make engine`, en orden alfabético, con
   `patch -p1 --forward`. Así el motor siempre se puede volver a extraer del
   tarball y el diff queda legible.
+- **La versión vive en un solo sitio.** El fichero `VERSION` de la raíz tiene el
+  número, `scripts/portable.sh` lo copia al paquete y lo escribe en `direkt.conf`, y
+  el menú lo lee de ahí para avisar si hay una release más nueva. Antes el número
+  estaba escrito a mano en varios sitios y la función del menú que lo busca no tenía
+  nada que leer, porque nadie escribía esa línea. Lo que queda escrito a mano es
+  `index.html` y los SHA-256 del principio de este README, y se cambian al publicar.
 - **La prueba es parte del contrato.** `make test` mide el render comparando
   capturas, así que un cambio que rompe el mundo sale con un fallo y no con un
   "ahora se ve raro".

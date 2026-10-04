@@ -818,6 +818,61 @@ for _m in "$MUSICA_MAP" "$MUSICA_NUMERO_MAP" "$MUSICA_FALTA_MAP" parkour; do
   rm -f "$BUILD/datos/id1/maps/$_m.bsp"
 done
 
+head_ "10. La version del paquete se lee y no se pierde"
+
+# El menu (tools/menu.py) lee la version del paquete de una linea "version = ..." en
+# direkt.conf para avisar si hay una release mas nueva. Esa linea la escribe
+# scripts/portable.sh al empaquetar, y "direkt.sh motor X" la reescribe sin perderla.
+#
+# Antes de esto nada la escribia: la funcion estaba ahi desde el principio pero no
+# tenia nada que leer, y la version vivia escrita a mano en varios sitios.
+if [[ -f "$REPO_ROOT/VERSION" ]]; then
+  _version="$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")"
+  if [[ "$_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    ok "el VERSION tiene un numero de version ($_version)"
+  else
+    ko "el VERSION no es un numero de version: '$_version'"
+  fi
+
+  if grep -qE "<dt>Version</dt><dd>v?$_version<" "$REPO_ROOT/index.html"; then
+    ok "index.html dice la misma version que VERSION"
+  else
+    ko "index.html no dice la version del VERSION (puede ser v$_version)"
+    grep -oE "<dt>Version</dt><dd>[^<]*" "$REPO_ROOT/index.html" >&2 || true
+  fi
+
+  # El menu tiene que entender el formato que escribe portable.sh. Se comprueba
+  # sobre un conf de mentira con ese formato, y no sobre el paquete entero, porque
+  # "make test" no empaqueta.
+  _tmp="$(mktemp -d)"
+  printf 'version = %s\n' "$_version" > "$_tmp/direkt.conf"
+  _leida="$(python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1] + "/tools")
+import menu
+from pathlib import Path
+print(menu.version_local(Path(sys.argv[2])) or "")
+' "$REPO_ROOT" "$_tmp")"
+  rm -rf "$_tmp"
+
+  if [[ "$_leida" == "$_version" ]]; then
+    ok "el menu lee la version del paquete ($_leida)"
+  else
+    ko "el menu no lee la version del paquete: leyo '$_leida'"
+  fi
+
+  # Y que portable.sh sea quien la escribe, leyendo el VERSION. Sin esto, el conf
+  # podria dejar de llevar la version sin que nada se entere.
+  if grep -q 'PAQUETE_VERSION="$(tr -d' scripts/portable.sh \
+     && grep -q "printf 'version = %s" scripts/portable.sh; then
+    ok "portable.sh escribe la version en el conf del paquete"
+  else
+    ko "portable.sh no escribe la version en el conf del paquete"
+  fi
+else
+  ko "no existe el fichero VERSION"
+fi
+
 head_ "Resultado"
 printf '  %d pasan, %d fallan\n\n' "$pass" "$fail"
 ((fail == 0)) || exit 1

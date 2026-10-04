@@ -158,6 +158,24 @@ done
 cp "$REPO/Makefile" "$REPO/LICENSE" "$REPO/README.md" "$REPO/THIRD_PARTY.md" \
    "$STAGE/fuente/"
 
+# La version del paquete, escrita en el sitio donde el menu la busca.
+#
+# El menu (tools/menu.py, version_local) lee una linea "version = ..." de
+# direkt.conf y avisa si hay una release mas nueva. Antes no habia ninguna linea
+# que leer porque nadie la escribia: la funcion estaba de mas. Ademas la version
+# estaba escrita a mano en tres sitios (el VERSION de ahora, index.html y los
+# SHA-256 del README), y con el fichero VERSION solo hay una fuente.
+echo "    version del paquete"
+if [ -f "$REPO/VERSION" ]; then
+	PAQUETE_VERSION="$(tr -d ' \t\r\n' < "$REPO/VERSION")"
+	if [ -n "$PAQUETE_VERSION" ]; then
+		printf 'version = %s\n' "$PAQUETE_VERSION" > "$STAGE/direkt.conf"
+	fi
+	# Y tambien el fichero entero, para que "direkt.sh motor X" pueda escribir la
+	# linea si alguien la borra del conf.
+	cp "$REPO/VERSION" "$STAGE/VERSION"
+fi
+
 # El tarball del motor va con su hash, que es lo que verifica fetch-deps.sh. Sin
 # esto el paquete compila pero no se puede reconstruir el motor sin red.
 echo "    tarball del motor"
@@ -453,7 +471,16 @@ motor_poner() {
 	if [ -f "$CONF" ]; then
 		sed -i.bak "s/^[[:space:]]*motor[[:space:]]*=.*/motor = $1/" "$CONF" && rm -f "$CONF.bak"
 	else
-		printf 'motor = %s\n' "$1" >"$CONF"
+		# Con la version dentro. Se escribe el motor primero y la version detras, para
+		# que la linea que hay que anadir de verdad se vea sola. Esta funcion
+		# llamandose con el motor, no con la version, la reescribiria entera y se
+		# comeria esa linea.
+		{
+			printf 'motor = %s\n' "$1"
+			[ -f "$AQUI/VERSION" ] && printf 'version = %s\n' \
+				"$(tr -d ' \t\r\n' < "$AQUI/VERSION")"
+			:
+		} > "$CONF"
 	fi
 	echo "  motor = $1  (quedado en $CONF)"
 }
