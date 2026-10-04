@@ -15,7 +15,7 @@ Licencia: **GPL-2.0**. Ver [`LICENSE`](LICENSE) y
 |---|---|---|
 | Linux | [⬇ direkt-portable-linux.tar.gz](https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-linux.tar.gz) — 127 MB | `./direkt.sh` |
 | macOS | [⬇ direkt-portable-macos.tar.gz](https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-macos.tar.gz) — 127 MB | doble clic en `direkt.command` |
-| Windows | [⬇ direkt-portable-windows.zip](https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-windows.zip) — 127 MB | doble clic en `direkt.bat` |
+| Windows | [⬇ direkt-portable-windows.zip](https://github.com/motlaxquia/Direkt/releases/latest/download/direkt-portable-windows.zip) — 130 MB | doble clic en `direkt.bat` |
 
 Paquete portable con los binarios ya compilados, los datos y el fuente entero,
 que es lo que obliga la GPL. Los tres se compilan solos en
@@ -33,9 +33,9 @@ cd direkt-portable-linux
 SHA-256 del paquete:
 
 ```
-d9e91c91ef4069c4b8837729cac115e55d56ad1f9da1e355239849d4e54f56b1  direkt-portable-linux.tar.gz
-86523fc0526efdc10a55300ba4f245b9e63e7224c4e349573115b541f41caea4  direkt-portable-macos.tar.gz
-d9d9e414c1af913af03008ded0174473583c663f3b850906e8ce9d295f99176b  direkt-portable-windows.zip
+438ce5b670f51f0571ad330266f244874fcacffed5e8dc08dd9f964bc4b2c7c4  direkt-portable-linux.tar.gz
+12fe165918bf8a2c1e8f75da11248062e8d42203be14b6282645be4c45173eeb  direkt-portable-macos.tar.gz
+b246ac1c5ce23f14b27c6b35a8a0aa7e9b0e16338f5300480ecde1f2f8e51865  direkt-portable-windows.zip
 ```
 
 **El motor pide OpenGL 4.3**, porque dibuja el mundo con *compute shaders*. En
