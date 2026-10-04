@@ -649,23 +649,30 @@ else
   # entra, que sale por el tramo alto (o sea que se libra del recorte de
   # velocidad del agachado, que lo dejaria todo en 100) y que se acaba al soltar.
   #
-  # La espera antes de pulsar Ctrl depende de lo rapido que vaya el motor, y no del
-  # reloj: la aceleracion del motor es por frame (PM_Accelerate mete una cantidad
-  # fija en cada frame), asi que en una maquina con pocos frames por segundo el
-  # jugador tarda muchisimo mas en llegar a 300, que es la velocidad minima para
-  # deslizarse. En la CI, con 2 nucleos y dibujo por software, 5 s de reloj no dan
-  # para nada y la prueba falla por una razon que no tiene que ver con el
-  # deslizamiento.
+  # Se mide en el mapa del dash (dash.map), que es una explanada de 2048 por 2048,
+  # y no en el grande. Dos razones, y las dos son que el jugador tiene que llegar a
+  # 300 antes de que le de tiempo a chocar con nada:
   #
-  # Por eso la espera sale de SETTLE, que es el parametro que la CI sube justamente
-  # para estas maquinas lentas (en el workflow va con SETTLE=25).
+  #   - En el mapa grande se estrella contra un muro a las 500-1000 unidades y se
+  #     queda alli contra el happening. En la CI se quedaba con velocidad cero y el
+  #     deslizamiento no llegaba a entrar nunca; en local llegaba a entrar por
+  #     casualidad, antes de chocar.
+  #   - La aceleracion del motor es por frame (PM_Accelerate mete una cantidad fija
+  #     en cada frame), no por segundo. En una maquina con pocos frames por segundo
+  #     el jugador tarda muchisimo mas en llegar a 300. En la CI, con 2 nucleos y
+  #     dibujo por software, eso son varios segundos. Por eso la espera sale de
+  #     SETTLE, que es el parametro que la CI sube ya para esas maquinas.
+  #
+  # Y la direccion no se controla, porque "+forward" va hacia donde mire la camara,
+  # y la camara al entrar esta en el origen. En una explanada cuadrada da igual
+  # hacia donde mire: hay sitio para acelerar en las cuatro direcciones.
   _espera_ctrl=5
   if [[ "${SETTLE:-0}" -ge 20 ]]; then
     _espera_ctrl=25
   fi
-  if "$REPO_ROOT/scripts/run-headless.sh" --map "$MAP" --settle 6 --min-lit 0 \
+  if "$REPO_ROOT/scripts/run-headless.sh" --map dash --settle 6 --min-lit 0 \
        --walk --tecla "ctrl:8:$_espera_ctrl" >"$BUILD/parkour-slide.out" 2>&1; then
-    LOG="$LOGS/run-$MAP.log"
+    LOG="$LOGS/run-dash.log"
     # El log se sobrescribe en cada prueba que use este mapa, asi que la del
     # deslizamiento se aparta. Sin esto, cuando falla no hay forma de mirar que
     # vio el juego: el log que queda es el de la ultima prueba del mapa.
