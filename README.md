@@ -306,6 +306,19 @@ Tres cosas de la estructura que conviene tener a mano:
   aplican solos en `make deps` y `make engine`, en orden alfabético, con
   `patch -p1 --forward`. Así el motor siempre se puede volver a extraer del
   tarball y el diff queda legible.
+- **La CI se ejecutaba en rojo desde hace once commits, y no se miraba.** Tres fallos
+  distintos, uno por sistema:
+  - En Linux y macOS faltaba un paso: `make assets`. El pak propio se empezó a usar
+    con los datos modificables, el banco lo pide y el empaquetado lo pide, pero el
+    workflow nunca lo añadió. Los dos jobs morían en el primer paso.
+  - En Windows no compilaba: en `bgmusic.c` usé `strlcpy`, que es de BSD y MinGW y
+    MSVC no tienen. En Quakespasm hay que usar `q_strlcpy`, que es la copia portable
+    del propio motor. Localmente solo se compila en Linux, así que esto no salió
+    hasta que se miró el log de la CI.
+  - Y el workflow solo escuchaba `push` a `main`, no los tags. Los tres jobs tienen su
+    `if: startsWith(github.ref, 'refs/tags/v')` para adjuntar el paquete a la release,
+    pero como la CI no se ejecutaba con un tag, ese código no había corrido nunca:
+    publicar no adjuntaba nada. Ahora los tags también disparan.
 - **La versión vive en un solo sitio.** El fichero `VERSION` de la raíz tiene el
   número, `scripts/portable.sh` lo copia al paquete y lo escribe en `direkt.conf`, y
   el menú lo lee de ahí para avisar si hay una release más nueva. Antes el número

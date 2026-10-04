@@ -6,6 +6,10 @@ name: compilar
 on:
   push:
     branches: [main]
+    # Con un tag tambien, que es lo que publica: cada job compila su paquete y lo
+    # adjunta a la release. Antes solo escuchaba "main", asi que los tres "if" de
+    # abajo no se habian ejecutado nunca y publicar no adjuntaba nada.
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -45,6 +49,12 @@ jobs:
 
       - name: Generador, editor y datos
         run: make bsp edit
+
+      # El pak propio. Sin este paso el banco se para en el primero ("falta el pak
+      # propio") y el empaquetado igual, y no hace falta nada mas para que pase: solo
+      # que el paso no estaba. Se estuvo rojo once commits seguidos por esto.
+      - name: Pak propio
+        run: make assets
 
       # El runner tiene 2 nucleos y dibuja por software con llvmpipe, asi que
       # 6 s de reloj son muchos menos frames que en una maquina normal. El
@@ -117,6 +127,11 @@ jobs:
 
       - name: Generador, editor y datos
         run: make bsp edit
+
+      # El pak propio. Sin este paso el empaquetado se para con "no existe
+      # build/datos/id1".
+      - name: Pak propio
+        run: make assets
 
       # En macOS no hay Xvfb ni forma de tener contexto de GL sin sesion
       # grafica, asi que aqui no se prueba el arranque del motor: se prueba
@@ -212,6 +227,12 @@ jobs:
       - name: Generador, editor y datos
         shell: msys2 {0}
         run: make bsp edit
+
+      # El pak propio. Sin este paso el empaquetado se para con "no existe
+      # build/datos/id1".
+      - name: Pak propio
+        shell: msys2 {0}
+        run: make assets
 
       - name: Pruebas que no necesitan ventana
         shell: msys2 {0}

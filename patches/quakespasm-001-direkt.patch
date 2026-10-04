@@ -45,7 +45,7 @@
 #   * El parche se genera contra el ORIGINAL, no contra el arbol ya parcheado.
 #     Si no, el diff incluye los cambios del parche anterior dos veces.
 --- a/Quake/Makefile	origen
-+++ b/Quake/Makefile	2026-10-04 00:16:17.000000000 +0000
++++ b/Quake/Makefile	2026-10-04 14:14:57.000000000 +0000
 @@ -140,9 +140,16 @@
  endif
  ifeq ($(USE_CODEC_VORBIS),1)
@@ -81,7 +81,7 @@
  else
  COMMON_LIBS= -lGL -lm
 --- a/Quake/bgmusic.c	origen
-+++ b/Quake/bgmusic.c	2026-10-04 00:16:17.000000000 +0000
++++ b/Quake/bgmusic.c	2026-10-04 14:14:57.000000000 +0000
 @@ -26,7 +26,6 @@
  #include "snd_codec.h"
  #include "bgmusic.h"
@@ -98,7 +98,7 @@
  	Cmd_AddCommand("music_pause", BGM_Pause_f);
  	Cmd_AddCommand("music_resume", BGM_Resume_f);
  	Cmd_AddCommand("music_loop", BGM_Loop_f);
-@@ -285,6 +285,466 @@
+@@ -285,6 +285,470 @@
  	Con_Printf("Couldn't handle music file %s\n", filename);
  }
  
@@ -323,6 +323,10 @@
 +BGM_CatalogoFichero
 +================================================================================
 +Devuelve la ruta relativa ("music/x.ogg") del indice, o NULL.
++
++OJO: aquí va q_strlcpy y no strlcpy. q_strlcpy es la copia portable del motor
++(Quakespasm la trae porque MinGW y MSVC no tienen strlcpy, que es de BSD); con
++strlcpy a secas el motor no compila en Windows y el fallo sale en la CI, no aquí.
 +================================================================================
 +*/
 +const char *BGM_CatalogoFichero (int indice)
@@ -331,7 +335,7 @@
 +
 +	if (indice < 1 || bgm_catalogo_n < 0 || indice > bgm_catalogo_n)
 +		return NULL;
-+	strlcpy (completo, bgm_catalogo[indice - 1].nombre, sizeof (completo));
++	q_strlcpy (completo, bgm_catalogo[indice - 1].nombre, sizeof (completo));
 +	return completo;
 +}
 +
@@ -565,7 +569,7 @@
  void BGM_PlayCDtrack (byte track, qboolean looping)
  {
  /* instead of searching by the order of music_handlers, do so by
-@@ -333,7 +793,28 @@
+@@ -333,7 +797,28 @@
  		handler = handler->next;
  	}
  	if (ext == NULL)
@@ -596,7 +600,7 @@
  	{
  		q_snprintf(tmp, sizeof(tmp), "%s/track%02d.%s",
 --- a/Quake/bgmusic.h	origen
-+++ b/Quake/bgmusic.h	2026-10-04 00:16:17.000000000 +0000
++++ b/Quake/bgmusic.h	2026-10-04 14:14:57.000000000 +0000
 @@ -39,5 +39,28 @@
  
  void BGM_PlayCDtrack (byte track, qboolean looping);
@@ -627,7 +631,7 @@
  #endif	/* _BGMUSIC_H_ */
  
 --- a/Quake/cl_input.c	origen
-+++ b/Quake/cl_input.c	2026-10-04 00:16:17.000000000 +0000
++++ b/Quake/cl_input.c	2026-10-04 14:14:57.000000000 +0000
 @@ -59,6 +59,11 @@
  
  int			in_impulse;
@@ -657,7 +661,7 @@
  	in_impulse = 0;
  
 --- a/Quake/cl_parse.c	origen
-+++ b/Quake/cl_parse.c	2026-10-04 00:16:17.000000000 +0000
++++ b/Quake/cl_parse.c	2026-10-04 14:14:57.000000000 +0000
 @@ -1245,7 +1245,12 @@
  		case svc_cdtrack:
  			cl.cdtrack = MSG_ReadByte ();
@@ -673,7 +677,7 @@
  			else
  				BGM_PlayCDtrack ((byte)cl.cdtrack, true);
 --- a/Quake/cvar.c	origen
-+++ b/Quake/cvar.c	2026-10-04 00:16:17.000000000 +0000
++++ b/Quake/cvar.c	2026-10-04 14:14:57.000000000 +0000
 @@ -223,6 +223,29 @@
  ============
  */
@@ -715,7 +719,7 @@
  
  //==============================================================================
 --- a/Quake/cvar.h	origen
-+++ b/Quake/cvar.h	2026-10-04 00:16:17.000000000 +0000
++++ b/Quake/cvar.h	2026-10-04 14:14:57.000000000 +0000
 @@ -41,6 +41,8 @@
  init function before any console commands are executed:
  
@@ -726,7 +730,7 @@
  
  C code usually just references a cvar in place:
 --- a/Quake/gl_screen.c	origen
-+++ b/Quake/gl_screen.c	2026-10-04 00:16:17.000000000 +0000
++++ b/Quake/gl_screen.c	2026-10-04 14:14:57.000000000 +0000
 @@ -281,6 +281,8 @@
  Internal use only
  =================
@@ -753,7 +757,7 @@
  	else if (size >= 110)
  		sb_lines = 24 * scale;
 --- a/Quake/keys.c	origen
-+++ b/Quake/keys.c	2026-10-04 00:16:17.000000000 +0000
++++ b/Quake/keys.c	2026-10-04 14:14:57.000000000 +0000
 @@ -550,6 +550,88 @@
  
  
@@ -844,7 +848,7 @@
  Key_StringToKeynum
  
 --- a/Quake/keys.h	origen
-+++ b/Quake/keys.h	2026-10-04 00:16:17.000000000 +0000
++++ b/Quake/keys.h	2026-10-04 14:14:57.000000000 +0000
 @@ -187,7 +187,12 @@
  qboolean Key_TextEntry (void);
  
@@ -859,7 +863,7 @@
  
  void Key_EndChat (void);
 --- a/Quake/main_sdl.c	origen
-+++ b/Quake/main_sdl.c	2026-10-04 00:16:17.000000000 +0000
++++ b/Quake/main_sdl.c	2026-10-04 14:14:57.000000000 +0000
 @@ -65,7 +65,13 @@
  
  // On OS X we call SDL_main from the launcher, but SDL2 doesn't redefine main
@@ -876,7 +880,7 @@
  #endif
  
 --- a/Quake/net_udp.c	origen
-+++ b/Quake/net_udp.c	2026-10-04 00:16:18.000000000 +0000
++++ b/Quake/net_udp.c	2026-10-04 14:14:57.000000000 +0000
 @@ -72,8 +72,11 @@
  #endif
  		if (!(local = gethostbyname(buff)))
@@ -912,7 +916,7 @@
  		int err = SOCKETERRNO;
  		Sys_Error ("UDP: ioctlsocket (FIONREAD) failed (%s)", socketerror(err));
 --- a/Quake/pr_edict.c	origen
-+++ b/Quake/pr_edict.c	2026-10-04 00:16:18.000000000 +0000
++++ b/Quake/pr_edict.c	2026-10-04 14:14:57.000000000 +0000
 @@ -945,6 +945,20 @@
  			continue;
  
@@ -935,7 +939,7 @@
  			ent->alpha = ENTALPHA_ENCODE(Q_atof(com_token));
  		//johnfitz
 --- a/Quake/sbar.c	origen
-+++ b/Quake/sbar.c	2026-10-04 00:16:18.000000000 +0000
++++ b/Quake/sbar.c	2026-10-04 14:14:57.000000000 +0000
 @@ -892,10 +892,68 @@
  Sbar_Draw
  ===============
@@ -1006,7 +1010,7 @@
  		return;		// console is full screen
  
 --- a/Quake/server.h	origen
-+++ b/Quake/server.h	2026-10-04 00:16:18.000000000 +0000
++++ b/Quake/server.h	2026-10-04 14:14:57.000000000 +0000
 @@ -244,4 +244,9 @@
  void SV_SaveSpawnparms (void);
  void SV_SpawnServer (const char *server);
@@ -1018,7 +1022,7 @@
 +
  #endif	/* QUAKE_SERVER_H */
 --- a/Quake/sv_main.c	origen
-+++ b/Quake/sv_main.c	2026-10-04 00:16:18.000000000 +0000
++++ b/Quake/sv_main.c	2026-10-04 14:14:57.000000000 +0000
 @@ -22,8 +22,13 @@
  // sv_main.c -- server main program
  
@@ -1063,7 +1067,7 @@
  // set view
  	MSG_WriteByte (&client->message, svc_setview);
 --- a/Quake/sys.h	origen
-+++ b/Quake/sys.h	2026-10-04 00:16:18.000000000 +0000
++++ b/Quake/sys.h	2026-10-04 14:14:57.000000000 +0000
 @@ -41,6 +41,25 @@
  int Sys_FileWrite (int handle,const void *data, int count);
  void Sys_mkdir (const char *path);
@@ -1091,7 +1095,7 @@
  /* returns an FS entity type, i.e. FS_ENT_FILE or FS_ENT_DIRECTORY.
   * returns FS_ENT_NONE (0) if no such file or directory is present. */
 --- a/Quake/sys_sdl_unix.c	origen
-+++ b/Quake/sys_sdl_unix.c	2026-10-04 00:16:18.000000000 +0000
++++ b/Quake/sys_sdl_unix.c	2026-10-04 14:14:57.000000000 +0000
 @@ -31,6 +31,7 @@
  #include <libgen.h>	/* dirname() and basename() */
  #endif
@@ -1202,7 +1206,7 @@
  {
  	/*
 --- a/Quake/sys_sdl_win.c	origen
-+++ b/Quake/sys_sdl_win.c	2026-10-04 00:16:18.000000000 +0000
++++ b/Quake/sys_sdl_win.c	2026-10-04 14:14:57.000000000 +0000
 @@ -142,6 +142,128 @@
  #ifndef INVALID_FILE_ATTRIBUTES
  #define INVALID_FILE_ATTRIBUTES	((DWORD)-1)
@@ -1333,7 +1337,7 @@
  {
  	DWORD result = GetFileAttributes(path);
 --- a/Quake/view.c	origen
-+++ b/Quake/view.c	2026-10-04 00:16:18.000000000 +0000
++++ b/Quake/view.c	2026-10-04 14:14:57.000000000 +0000
 @@ -685,6 +685,7 @@
  Roll is induced by movement and damage
  ==============
@@ -1369,7 +1373,7 @@
  	}
  }
 --- a/Quake/wsaerror.h	origen
-+++ b/Quake/wsaerror.h	2026-10-04 00:16:18.000000000 +0000
++++ b/Quake/wsaerror.h	2026-10-04 14:14:57.000000000 +0000
 @@ -6,6 +6,14 @@
   * http://www.sockets.com/err_lst1.htm
   */
