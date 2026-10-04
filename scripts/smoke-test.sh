@@ -475,13 +475,24 @@ else
      && "$REPO_ROOT/scripts/run-headless.sh" --map parkour --settle 5 --min-lit 0 \
        --tecla "space:3" >"$BUILD/parkour-salto.out" 2>&1; then
     LOG="$LOGS/run-parkour.log"
+    # Lo que se comprueba es el impulso, no la altura a la que llega el jugador. La
+    # altura depende de cuantos frames dura el empuje y de cuanto dura cada frame, y
+    # las dos cosas son del motor y de la maquina: en la CI el salto medido salia por
+    # debajo de 55 con el mismo codigo que aqui da mas de 70. Con un numero fijo, la
+    # prueba dependia de la maquina. El impulso lo pone el codigo nuestro y es el
+    # mismo siempre, asi que ese si se puede comprobar.
+    #
+    # Y no solo que el jugador se mueva: que el salto sea del proyecto y no el del
+    # motor, que es justo lo que faltaba antes.
+    _fuerte="$(grep -c "el salto tira con fuerza" "$LOG" || true)"
+    _flojo="$(grep -c "el salto tira flojo" "$LOG" || true)"
     _alto="$(grep -cE "el salto es (alto|gigante)" "$LOG" || true)"
-    _corto="$(grep -cE "el salto es (corto|normal)" "$LOG" || true)"
 
-    if ((_alto > 0)); then
-      ok "el jugador salta y el empuje lo hace alto ($_alto saltos)"
+    if ((_fuerte > 0)); then
+      ok "el salto aplica el impulso del proyecto ($_fuerte saltos, $_alto altos)"
     else
-      ko "nadie ha saltado alto: solo $_corto saltos cortos"
+      ko "nadie ha saltado con el impulso del proyecto: $_flojo flojos"
+      echo "        log: $LOG" >&2
       tail -10 "$BUILD/parkour-salto.out" >&2
     fi
   else

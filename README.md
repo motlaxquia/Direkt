@@ -315,6 +315,11 @@ Tres cosas de la estructura que conviene tener a mano:
     MSVC no tienen. En Quakespasm hay que usar `q_strlcpy`, que es la copia portable
     del propio motor. Localmente solo se compila en Linux, así que esto no salió
     hasta que se miró el log de la CI.
+  - La altura del salto no se puede comparar con un número fijo. Depende de cuántos
+    frames dura el empuje y de cuánto dura cada frame, y las dos cosas son del motor:
+    en la CI el mismo código medía menos de 55 y aquí más de 70. Por eso la prueba
+    comprueba el impulso, que lo pone nuestro código y es el mismo siempre, y no la
+    altura. De paso, el juego avisa de si el salto tira fuerte o flojo.
   - En Linux el deslizamiento fallaba solo en la CI, y no era del deslizamiento: la
     aceleración del motor es **por frame**, así que en una máquina con pocos frames por
     segundo el jugador tarda mucho más en llegar a las 300 que es la velocidad mínima

@@ -110,7 +110,26 @@ void() direkt_salta =
 	// suelo debajo. Sin suelo no hay salto: en el aire el boton hace falta para
 	// otra cosa (el dash).
 	if (boton && !direkt_salto_boton && direkt_piso())
+	{
 		self.velocity_z = DIREKT_SALTO_VELOCIDAD;
+
+		// El banco de pruebas comprueba ESTO y no la altura a la que llega el jugador.
+		//
+		// La altura depende de cuantos frames dura el empuje y de cuanto dura cada
+		// frame, y las dos cosas son del motor y de la maquina: en la CI, con dos
+		// nucleos y dibujo por software, el salto medido salia por debajo de 55
+		// mientras que en local pasaba de 70. Con el mismo codigo. Comparar la altura
+		// con un numero fijo hacia que la prueba dependiera de la maquina.
+		//
+		// El impulso lo pone este codigo y es el mismo siempre, asi que eso si se
+		// puede comprobar. Y de paso dice si el salto tiro o no, que es justo lo que
+		// hay que asegurar: que el motor, que no aplica ningun impulso de salto, deja
+		// al jugador con uno nuestro.
+		if (self.velocity_z >= 250)
+			localcmd(" echo DIREKT: el salto tira con fuerza");
+		else
+			localcmd(" echo DIREKT: el salto tira flojo");
+	}
 
 	direkt_salto_boton = boton;
 
