@@ -321,6 +321,10 @@ Tres cosas de la estructura que conviene tener a mano:
     para deslizarse. En la CI (2 núcleos y dibujo por software) 5 s de reloj no dan
     para nada. La espera antes de pulsar Ctrl sale ahora de `SETTLE`, que es el
     parámetro que la CI sube ya para esas máquinas.
+  - Y al adjuntar el paquete a la release: el `GITHUB_TOKEN` viene con solo lectura
+    y el workflow nunca pidió permiso de escritura, así que el paso fallaba con
+    "Resource not accessible by integration". Los tres sistemas compilaban y probaban
+    bien; lo que no funcionaba era subir el fichero.
   - Y el workflow solo escuchaba `push` a `main`, no los tags. Los tres jobs tienen su
     `if: startsWith(github.ref, 'refs/tags/v')` para adjuntar el paquete a la release,
     pero como la CI no se ejecutaba con un tag, ese código no había corrido nunca:

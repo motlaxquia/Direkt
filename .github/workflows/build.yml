@@ -17,6 +17,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Sin esto, el paso que adjunta el paquete a la release falla con
+# "Resource not accessible by integration": el GITHUB_TOKEN viene con solo lectura
+# y no puede crear la release ni subir los ficheros.
+permissions:
+  contents: write
+
 env:
   # Las dos dependencias externas van fijadas por SHA en fetch-deps.sh, asi que
   # esto no decide de donde se fia, solo evita que apt pregunte.
