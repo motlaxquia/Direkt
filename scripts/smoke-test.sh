@@ -659,6 +659,10 @@ else
       ok "el deslizamiento entra ($_entradas)"
     else
       ko "el deslizamiento nunca entra"
+      echo "        log: $LOG" >&2
+      echo "        (si el aviso de 'velocidad por encima de 200' no sale, el"
+      echo "         jugador no ha llegado a la velocidad minima y el problema es que"
+      echo "         la maquina va a pocos frames; espera antes de pulsar = ${_espera_ctrl}s)" >&2
       tail -10 "$BUILD/parkour-slide.out" >&2
     fi
 

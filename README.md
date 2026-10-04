@@ -315,6 +315,12 @@ Tres cosas de la estructura que conviene tener a mano:
     MSVC no tienen. En Quakespasm hay que usar `q_strlcpy`, que es la copia portable
     del propio motor. Localmente solo se compila en Linux, así que esto no salió
     hasta que se miró el log de la CI.
+  - En Linux el deslizamiento fallaba solo en la CI, y no era del deslizamiento: la
+    aceleración del motor es **por frame**, así que en una máquina con pocos frames por
+    segundo el jugador tarda mucho más en llegar a las 300 que es la velocidad mínima
+    para deslizarse. En la CI (2 núcleos y dibujo por software) 5 s de reloj no dan
+    para nada. La espera antes de pulsar Ctrl sale ahora de `SETTLE`, que es el
+    parámetro que la CI sube ya para esas máquinas.
   - Y el workflow solo escuchaba `push` a `main`, no los tags. Los tres jobs tienen su
     `if: startsWith(github.ref, 'refs/tags/v')` para adjuntar el paquete a la release,
     pero como la CI no se ejecutaba con un tag, ese código no había corrido nunca:
