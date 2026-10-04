@@ -1,0 +1,155 @@
+// Pista de pruebas del PLanEO y del DASH. No hay nada mas.
+//
+// Las dos se comprueban aqui y no en la pista de parkour por una razon concreta:
+// alla el jugador nace a 20 del muro, y al pulsar Shift la carrera por la pared tiene
+// prioridad sobre el dash y sobre el planeo, se los come y no hay nada que medir.
+// Aqui no hay muros.
+//
+// El jugador nace en el aire, a 3000, y cae de cabeza. Dos cosas:
+//
+//   - El planeo necesita una caida larga. Su tope son 200 y con su gravedad (0,2,
+//     o sea 160) hacen falta 125 unidades de caida para llegar a 200. Con el fondo
+//     que tenia la pista antes (96) no se llegaba nunca y no habia forma de probar
+//     que frena de verdad.
+//   - No hace falta andar para el planeo. El banco no puede fiarse de "+forward"
+//     para colocar al jugador donde interesa, porque la direccion de esa tecla la
+//     manda la camara, y la camara al entrar esta en el origen: en un mapa se hacia
+//     hacia un lado y en otro hacia el contrario con el mismo comando. Cayendo de
+//     cabeza no hay ninguna direccion que depender.
+//
+// Abajo hay una plataforma de 2048 por 1024. Ahiaterriza el jugador y ahi se mide el
+// dash, que salta al pasar de suelo a aire con Shift pulsado: para eso hay que
+// correr un poco antes, porque el dash empuja en la direccion de vuelo y sin
+// velocidad no hay nada que empujar. La plataforma es grande a proposito, para que
+// de 1000 de carrera quepa en cualquier direccion en que mire la camara.
+//
+// El suelo y la plataforma se trocean en trozos de 1024 o menos porque con una sola
+// cara de 5120 el motor dice "Bad surface extents": el lightmap no aguanta una
+// cara tan grande. La pista de parkour trocea el suelo por la misma razon.
+//
+// Formato, por si se toca esto: los comentarios van aqui arriba y nunca dentro de
+// las llaves, y cada brush lleva sus seis caras o no cierra un volumen.
+{
+"classname" "worldspawn"
+"wad" "gfx.wad"
+"music" "corpse_army.ogg"
+{
+( 0 -512 -64 )( 0 0 -64 )( 0 0 0 )( 0 -512 0 ) wall1
+( -1024 -512 -64 )( -1024 -512 0 )( -1024 0 0 )( -1024 0 -64 ) wall1
+( -1024 0 -64 )( -1024 0 0 )( 0 0 0 )( 0 0 -64 ) wall1
+( -1024 -512 -64 )( 0 -512 -64 )( 0 -512 0 )( -1024 -512 0 ) wall1
+( -1024 -512 0 )( 0 -512 0 )( 0 0 0 )( -1024 0 0 ) wall1
+( -1024 -512 -64 )( -1024 0 -64 )( 0 0 -64 )( 0 -512 -64 ) wall1
+}
+{
+( 0 0 -64 )( 0 512 -64 )( 0 512 0 )( 0 0 0 ) wall1
+( -1024 0 -64 )( -1024 0 0 )( -1024 512 0 )( -1024 512 -64 ) wall1
+( -1024 512 -64 )( -1024 512 0 )( 0 512 0 )( 0 512 -64 ) wall1
+( -1024 0 -64 )( 0 0 -64 )( 0 0 0 )( -1024 0 0 ) wall1
+( -1024 0 0 )( 0 0 0 )( 0 512 0 )( -1024 512 0 ) wall1
+( -1024 0 -64 )( -1024 512 -64 )( 0 512 -64 )( 0 0 -64 ) wall1
+}
+{
+( 1024 -512 -64 )( 1024 0 -64 )( 1024 0 0 )( 1024 -512 0 ) wall1
+( 0 -512 -64 )( 0 -512 0 )( 0 0 0 )( 0 0 -64 ) wall1
+( 0 0 -64 )( 0 0 0 )( 1024 0 0 )( 1024 0 -64 ) wall1
+( 0 -512 -64 )( 1024 -512 -64 )( 1024 -512 0 )( 0 -512 0 ) wall1
+( 0 -512 0 )( 1024 -512 0 )( 1024 0 0 )( 0 0 0 ) wall1
+( 0 -512 -64 )( 0 0 -64 )( 1024 0 -64 )( 1024 -512 -64 ) wall1
+}
+{
+( 1024 0 -64 )( 1024 512 -64 )( 1024 512 0 )( 1024 0 0 ) wall1
+( 0 0 -64 )( 0 0 0 )( 0 512 0 )( 0 512 -64 ) wall1
+( 0 512 -64 )( 0 512 0 )( 1024 512 0 )( 1024 512 -64 ) wall1
+( 0 0 -64 )( 1024 0 -64 )( 1024 0 0 )( 0 0 0 ) wall1
+( 0 0 0 )( 1024 0 0 )( 1024 512 0 )( 0 512 0 ) wall1
+( 0 0 -64 )( 0 512 -64 )( 1024 512 -64 )( 1024 0 -64 ) wall1
+}
+{
+( 2048 -512 -64 )( 2048 0 -64 )( 2048 0 0 )( 2048 -512 0 ) wall1
+( 1024 -512 -64 )( 1024 -512 0 )( 1024 0 0 )( 1024 0 -64 ) wall1
+( 1024 0 -64 )( 1024 0 0 )( 2048 0 0 )( 2048 0 -64 ) wall1
+( 1024 -512 -64 )( 2048 -512 -64 )( 2048 -512 0 )( 1024 -512 0 ) wall1
+( 1024 -512 0 )( 2048 -512 0 )( 2048 0 0 )( 1024 0 0 ) wall1
+( 1024 -512 -64 )( 1024 0 -64 )( 2048 0 -64 )( 2048 -512 -64 ) wall1
+}
+{
+( 2048 0 -64 )( 2048 512 -64 )( 2048 512 0 )( 2048 0 0 ) wall1
+( 1024 0 -64 )( 1024 0 0 )( 1024 512 0 )( 1024 512 -64 ) wall1
+( 1024 512 -64 )( 1024 512 0 )( 2048 512 0 )( 2048 512 -64 ) wall1
+( 1024 0 -64 )( 2048 0 -64 )( 2048 0 0 )( 1024 0 0 ) wall1
+( 1024 0 0 )( 2048 0 0 )( 2048 512 0 )( 1024 512 0 ) wall1
+( 1024 0 -64 )( 1024 512 -64 )( 2048 512 -64 )( 2048 0 -64 ) wall1
+}
+{
+( 3072 -512 -64 )( 3072 0 -64 )( 3072 0 0 )( 3072 -512 0 ) wall1
+( 2048 -512 -64 )( 2048 -512 0 )( 2048 0 0 )( 2048 0 -64 ) wall1
+( 2048 0 -64 )( 2048 0 0 )( 3072 0 0 )( 3072 0 -64 ) wall1
+( 2048 -512 -64 )( 3072 -512 -64 )( 3072 -512 0 )( 2048 -512 0 ) wall1
+( 2048 -512 0 )( 3072 -512 0 )( 3072 0 0 )( 2048 0 0 ) wall1
+( 2048 -512 -64 )( 2048 0 -64 )( 3072 0 -64 )( 3072 -512 -64 ) wall1
+}
+{
+( 3072 0 -64 )( 3072 512 -64 )( 3072 512 0 )( 3072 0 0 ) wall1
+( 2048 0 -64 )( 2048 0 0 )( 2048 512 0 )( 2048 512 -64 ) wall1
+( 2048 512 -64 )( 2048 512 0 )( 3072 512 0 )( 3072 512 -64 ) wall1
+( 2048 0 -64 )( 3072 0 -64 )( 3072 0 0 )( 2048 0 0 ) wall1
+( 2048 0 0 )( 3072 0 0 )( 3072 512 0 )( 2048 512 0 ) wall1
+( 2048 0 -64 )( 2048 512 -64 )( 3072 512 -64 )( 3072 0 -64 ) wall1
+}
+{
+( 4096 -512 -64 )( 4096 0 -64 )( 4096 0 0 )( 4096 -512 0 ) wall1
+( 3072 -512 -64 )( 3072 -512 0 )( 3072 0 0 )( 3072 0 -64 ) wall1
+( 3072 0 -64 )( 3072 0 0 )( 4096 0 0 )( 4096 0 -64 ) wall1
+( 3072 -512 -64 )( 4096 -512 -64 )( 4096 -512 0 )( 3072 -512 0 ) wall1
+( 3072 -512 0 )( 4096 -512 0 )( 4096 0 0 )( 3072 0 0 ) wall1
+( 3072 -512 -64 )( 3072 0 -64 )( 4096 0 -64 )( 4096 -512 -64 ) wall1
+}
+{
+( 4096 0 -64 )( 4096 512 -64 )( 4096 512 0 )( 4096 0 0 ) wall1
+( 3072 0 -64 )( 3072 0 0 )( 3072 512 0 )( 3072 512 -64 ) wall1
+( 3072 512 -64 )( 3072 512 0 )( 4096 512 0 )( 4096 512 -64 ) wall1
+( 3072 0 -64 )( 4096 0 -64 )( 4096 0 0 )( 3072 0 0 ) wall1
+( 3072 0 0 )( 4096 0 0 )( 4096 512 0 )( 3072 512 0 ) wall1
+( 3072 0 -64 )( 3072 512 -64 )( 4096 512 -64 )( 4096 0 -64 ) wall1
+}
+}
+{
+"classname" "light"
+"origin" "0 0 1100"
+"light" "400"
+}
+{
+"classname" "light"
+"origin" "-512 0 1100"
+"light" "300"
+}
+{
+"classname" "light"
+"origin" "512 0 1100"
+"light" "300"
+}
+{
+"classname" "light"
+"origin" "0 0 600"
+"light" "400"
+}
+{
+"classname" "light"
+"origin" "-512 0 300"
+"light" "400"
+}
+{
+"classname" "light"
+"origin" "1024 0 300"
+"light" "500"
+}
+{
+"classname" "light"
+"origin" "2048 0 300"
+"light" "500"
+}
+{
+"classname" "info_player_start"
+"origin" "300 0 3000"
+}

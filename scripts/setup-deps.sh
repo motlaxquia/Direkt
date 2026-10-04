@@ -23,6 +23,16 @@ CODEC_PKGS=(
 )
 
 # Ejecucion sin pantalla + herramientas de captura
+#
+# xdotool y x11-xserver-utils no son para el juego: son para el banco de pruebas.
+# El banco tiene que PULSAR teclas de verdad (Shift y Ctrl del parkour) porque a
+# "+algo" no llega: el motor cuenta si la tecla esta pulsada, no que comando tenga
+# enlazado. Sin xdotool, las cinco pruebas de parkour se saltan avisando, y la CI
+# pasaria en verde sin mirar nada de eso.
+#
+# x11-xserver-utils es por el "xset r off", que quita el autorepeat del teclado de X.
+# Sin el, X manda repeticiones que el motor ve como pulsar-soltar y la tecla
+# modificadora llega al juego a saltos.
 RUNTIME_PKGS=(
   xvfb
   x11-utils
@@ -32,6 +42,8 @@ RUNTIME_PKGS=(
   python3-numpy
   unzip
   ca-certificates
+  xdotool
+  x11-xserver-utils
 )
 
 # Compilador de QuakeC

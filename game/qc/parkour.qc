@@ -54,21 +54,14 @@
 // vuelve a mandar cada frame mientras la tecla este pulsada. Asi que no hace
 // falta guardar si se pulso: basta con leer el impulso de este frame.
 //
-// Con dos salvedades, y las dos medidas en este banco:
-//
-//   - Si se pierde un paquete llega un frame sin impulso.
-//   - X11 manda repeticiones de teclado y, segun como llegan, el motor las ve como
-//     pulsar-soltar. Medido: con Shift mantenido quince segundos el juego recibia
-//     cuatro sueltas, y los huecos llegaban a 18 frames (unos 0,4 s a 45 fps).
-//
-// Por eso no se decide "pulsada o no" sino "pulsada hace poco": se guarda el
-// instante y se da una gracia de medio segundo. Sin esto, en Linux, el dash, el
-// deslizamiento y el planeo se cortan solos cada 1,6 segundos sin haber tocado
-// nada.
+// Si se pierde un paquete llega un frame sin impulso, y la tecla pareceria soltada
+// un instante. Por eso no se decide "pulsada o no" sino "pulsada hace poco": se
+// guarda el instante y se da una gracia de un sexto de segundo, de sobra para un
+// paquete perdido y lo bastante corta para que soltar la tecla se note al momento.
 #define DIREKT_IMPULSO_MOD      27	// Shift: dash, planeo y carrera por la pared
 #define DIREKT_IMPULSO_DESLIZAR 28	// Ctrl: deslizarse
 
-#define DIREKT_TECLA_GRACIA 0.5
+#define DIREKT_TECLA_GRACIA 0.15
 
 float	direkt_mod_hasta;			// hasta que momento vale Shift
 float	direkt_deslizar_hasta;	// hasta que momento vale Ctrl
@@ -1048,6 +1041,20 @@ void() direkt_carrera_muro =
 	suelo = suelo * (1 / vlen(suelo));
 
 	distancia = direkt_muro_cerca();
+
+	// Sin pared cerca no hay carrera por la pared. FALTABA ESTA COMPROBACION y era
+	// un fallo gordo: sin ella, con Shift pulsado en el aire, la carrera se activaba
+	// siempre, en cualquier mapa y aunque no hubiera un muro a 24 unidades. La normal
+	// de "no hay nada" es '0 0 0', asi que el empujito era cero y no se notaba, pero la
+	// carrera quedaba marcada como activa y, como tiene prioridad sobre el dash, se
+	// lo comia: el dash no llegaba a dispararse NUNCA en ningun sitio.
+	//
+	// El salto contra la pared si lo miraba desde el principio (seek directo con
+	// comprobacion de distancia). Aqui se usa el helper de las cuatro direcciones y se
+	// le olvidó el "if".
+	if (distancia <= 0)
+		return;
+
 	normal = direkt_muro_cerca_normal;
 
 	nx = direkt_vx(normal);

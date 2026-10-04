@@ -207,7 +207,7 @@ muro cerca, Shift es el dash; y caer despacio es lo que siempre se puede hacer.
 
 ### Fallos de fondo que salió por el camino
 
-Tres cosas que costaron y que conviene no volver a romper:
+Cuatro cosas que costaron y que conviene no volver a romper:
 
 1. **El motor no tiene salto.** Ni Ironwail ni Quakespasm aplican impulso de salto:
    en `sv_user.c` no hay ni un `velocity[2] +=`, `SV_ClientThink` solo hace
@@ -221,11 +221,33 @@ Tres cosas que costaron y que conviene no volver a romper:
    nariz. Ahora los rayos salen por fuera de la caja (17 unidades de semi-caja + 1,
    y 25 por debajo de los pies para el suelo).
 
-3. **X11 manda repeticiones de teclado que el motor ve como pulsar-soltar.** Con una
-   tecla modificada mantenida, el juego recibía sueltas cada 1,6 segundos: el dash,
-   el deslizamiento y el planeo se cortaban solos sin haber tocado nada. Ahora el
-   motor mantiene el impulso 0,3 s después de la tecla y el juego tiene una gracia
-   de medio segundo.
+3. **Un fallo del banco de pruebas parecía un fallo del juego.** Con una tecla
+   modificada mantenida, el juego recibía sueltas cada 1,6 segundos y el dash, el
+   deslizamiento y el planeo se cortaban solos. Se tapó dos veces parcheando
+   el motor (una gracia de 0,3 s) y el juego (otra de medio segundo), y el efecto no
+   cambiaba: la causa era que el bloque de teclas de `run-headless.sh` estaba
+   copiado cuatro veces, así que cada tecla se pulsaba y soltaba cuatro veces por
+   partida. Arreglado el arnés, el juego recibe una pulsación por pulsación y las
+   dos gracias se pueden quitar.
+
+   Queda una sola, de 0,15 s, en el juego, y es para lo que estaba pensada: si se
+   pierde un paquete llega un frame sin impulso y la tecla parecería soltada un
+   instante. No arregla nada que no deba arreglarse: soltar una tecla se nota
+   enseguida.
+
+4. **La carrera por la pared se activaba sin haber pared, y se comía el dash.** En
+   `direkt_carrera_muro` se pedía la distancia al muro más cercano pero no se
+   comprobaba: la normal de "no hay nada" es `0 0 0`, así que el empujón era cero y
+   no se notaba, pero la carrera quedaba marcada como activa. Y como la carrera por
+   la pared tiene prioridad sobre el dash en `player.qc`, el dash **no se disparaba
+   nunca, en ningún mapa**. El salto contra la pared, que es el mismo mecanismo, sí
+   comprobaba la distancia desde el principio; aquí se le olvidó.
+
+   Se encontró al escribir la prueba del dash. Las pruebas anteriores "pasaban"
+   porque el contador miraba un log acumulado de varias partidas: el mensaje del dash
+   venía de una ejecución anterior. El salto contra la pared, que se probaba con el
+   mapa de parkour, tampoco lo detectaba porque allí el jugador tiene un muro al lado
+   y la carrera por la pared es lo que toca.
 
 ### La pista de pruebas
 
@@ -287,6 +309,12 @@ Tres cosas de la estructura que conviene tener a mano:
 - **La prueba es parte del contrato.** `make test` mide el render comparando
   capturas, así que un cambio que rompe el mundo sale con un fallo y no con un
   "ahora se ve raro".
+- **Lo que prueba cada sistema.** La CI compila en Linux, macOS y Windows, pero
+  solo en Linux se juega: las pruebas de teclas (parkour) y el smoke test necesitan
+  pulsar teclas de verdad con `xdotool` y comparar capturas. En macOS y Windows se
+  ejecutan `bsp-test` y `editor-test`, que no dependen de la ventana. Por eso
+  `scripts/setup-deps.sh` instala `xdotool`: sin él, las cinco pruebas de parkour se
+  saltan avisando y la CI pasaría en verde sin mirar nada de eso.
 
 ### Sin tarjeta gráfica
 

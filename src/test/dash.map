@@ -1,0 +1,84 @@
+// Pista de pruebas del DASH. Llano, sin una sola pared.
+//
+// El dash no se mide en la pista de parkour ni en la de planeo, y en los dos casos
+// por la misma razon: la carrera por la pared tiene prioridad sobre el dash y se lo
+// come. En la pista de parkour el jugador nace a 20 del muro; en la de planeo cae
+// pegado a la pared lateral de la plataforma. Aqui no hay nada a menos de 24
+// unidades en ningun momento, que es la distancia que mira la sonda de muro.
+//
+// El jugador nace a 24 del suelo, o sea encima, y el banco le pulsa adelante +
+// espacio + Shift a la vez. Corre un poco, despega, y el despegue con Shift es el
+// dash. La adelante va en el acorde a proposito: el dash empuja en la direccion de
+// vuelo y sin velocidad no hay nada que empujar.
+//
+// El suelo se trocea porque con una sola cara de 2048 el motor dice "Bad surface
+// extents": el lightmap no aguanta una cara tan grande.
+//
+// Formato, por si se toca esto: los comentarios van aqui arriba y nunca dentro de
+// las llaves, y cada brush lleva sus seis caras o no cierra un volumen.
+{
+"classname" "worldspawn"
+"wad" "gfx.wad"
+"music" "corpse_army.ogg"
+{
+( 0 -1024 -64 )( 0 0 -64 )( 0 0 0 )( 0 -1024 0 ) wall1
+( -1024 -1024 -64 )( -1024 -1024 0 )( -1024 0 0 )( -1024 0 -64 ) wall1
+( -1024 0 -64 )( -1024 0 0 )( 0 0 0 )( 0 0 -64 ) wall1
+( -1024 -1024 -64 )( 0 -1024 -64 )( 0 -1024 0 )( -1024 -1024 0 ) wall1
+( -1024 -1024 0 )( 0 -1024 0 )( 0 0 0 )( -1024 0 0 ) wall1
+( -1024 -1024 -64 )( -1024 0 -64 )( 0 0 -64 )( 0 -1024 -64 ) wall1
+}
+{
+( 0 0 -64 )( 0 1024 -64 )( 0 1024 0 )( 0 0 0 ) wall1
+( -1024 0 -64 )( -1024 0 0 )( -1024 1024 0 )( -1024 1024 -64 ) wall1
+( -1024 1024 -64 )( -1024 1024 0 )( 0 1024 0 )( 0 1024 -64 ) wall1
+( -1024 0 -64 )( 0 0 -64 )( 0 0 0 )( -1024 0 0 ) wall1
+( -1024 0 0 )( 0 0 0 )( 0 1024 0 )( -1024 1024 0 ) wall1
+( -1024 0 -64 )( -1024 1024 -64 )( 0 1024 -64 )( 0 0 -64 ) wall1
+}
+{
+( 1024 -1024 -64 )( 1024 0 -64 )( 1024 0 0 )( 1024 -1024 0 ) wall1
+( 0 -1024 -64 )( 0 -1024 0 )( 0 0 0 )( 0 0 -64 ) wall1
+( 0 0 -64 )( 0 0 0 )( 1024 0 0 )( 1024 0 -64 ) wall1
+( 0 -1024 -64 )( 1024 -1024 -64 )( 1024 -1024 0 )( 0 -1024 0 ) wall1
+( 0 -1024 0 )( 1024 -1024 0 )( 1024 0 0 )( 0 0 0 ) wall1
+( 0 -1024 -64 )( 0 0 -64 )( 1024 0 -64 )( 1024 -1024 -64 ) wall1
+}
+{
+( 1024 0 -64 )( 1024 1024 -64 )( 1024 1024 0 )( 1024 0 0 ) wall1
+( 0 0 -64 )( 0 0 0 )( 0 1024 0 )( 0 1024 -64 ) wall1
+( 0 1024 -64 )( 0 1024 0 )( 1024 1024 0 )( 1024 1024 -64 ) wall1
+( 0 0 -64 )( 1024 0 -64 )( 1024 0 0 )( 0 0 0 ) wall1
+( 0 0 0 )( 1024 0 0 )( 1024 1024 0 )( 0 1024 0 ) wall1
+( 0 0 -64 )( 0 1024 -64 )( 1024 1024 -64 )( 1024 0 -64 ) wall1
+}
+}
+{
+"classname" "light"
+"origin" "0 0 400"
+"light" "500"
+}
+{
+"classname" "light"
+"origin" "768 0 400"
+"light" "500"
+}
+{
+"classname" "light"
+"origin" "0 768 400"
+"light" "500"
+}
+{
+"classname" "light"
+"origin" "-768 0 400"
+"light" "500"
+}
+{
+"classname" "light"
+"origin" "0 -768 400"
+"light" "500"
+}
+{
+"classname" "info_player_start"
+"origin" "300 0 24"
+}

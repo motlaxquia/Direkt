@@ -473,7 +473,7 @@ else
   if "$BUILD/bin/direkt-bsp" "$REPO_ROOT/src/test/parkour.map" \
        "$BUILD/datos/id1/maps/parkour.bsp" >"$BUILD/bsp-parkour.out" 2>&1 \
      && "$REPO_ROOT/scripts/run-headless.sh" --map parkour --settle 5 --min-lit 0 \
-       --golpes "space:4:0.6" >"$BUILD/parkour-salto.out" 2>&1; then
+       --tecla "space:3" >"$BUILD/parkour-salto.out" 2>&1; then
     LOG="$LOGS/run-parkour.log"
     _alto="$(grep -cE "el salto es (alto|gigante)" "$LOG" || true)"
     _corto="$(grep -cE "el salto es (corto|normal)" "$LOG" || true)"
@@ -558,32 +558,74 @@ else
       tail -10 "$BUILD/parkour-bhop.out" >&2
     fi
 
-    # 2 y 3. Dash y planeo: caer por el hueco con Shift. El arranque del dash es al
-    # entrar en el aire, y el planeo mientras cae.
-    if _parkour parkour 9 --walk --tecla "shift:6" --test-de 2.4 \
-         >"$BUILD/parkour-dash.out" 2>&1; then
-      _dash="$(grep -c "DIREKT: dash" "$PARKOUR_LOG" || true)"
-      _planeo="$(grep -c "DIREKT: planeo frenando la caida" "$PARKOUR_LOG" || true)"
+    # 2. Dash, y en su propia pista (src/test/dash.map), llana y sin una sola pared.
+    #
+    # En la pista de parkour no se puede medir: el jugador nace a 20 del muro y la
+    # carrera por la pared tiene prioridad sobre el dash, se lo come y no dispara.
+    # Aqui el banco pulsa adelante + espacio + Shift: el jugador corre, despega, y el
+    # despegue con Shift es el dash. El "adelante" va en el acorde porque el dash
+    # empuja en la direccion de vuelo y hace falta velocidad de verdad.
+    if "$BUILD/bin/direkt-bsp" "$REPO_ROOT/src/test/dash.map" \
+         "$BUILD/datos/id1/maps/dash.bsp" >"$BUILD/bsp-dash.out" 2>&1; then
+      ok "la pista de dash compila"
+    else
+      ko "la pista de dash no compila"
+      tail -5 "$BUILD/bsp-dash.out" >&2
+    fi
 
+    if "$REPO_ROOT/scripts/run-headless.sh" --map dash --settle 1 --min-lit 0 \
+         --tecla "w+space+shift:6" >"$BUILD/parkour-dash.out" 2>&1; then
+      _dash="$(grep -c "DIREKT: dash" "$BUILD/logs/run-dash.log" || true)"
       if ((_dash > 0)); then
-        ok "el dash se dispara en el aire ($_dash)"
+        ok "el dash sale al despegar con Shift ($_dash)"
       else
-        ko "el dash no se dispara nunca"
+        ko "el dash no sale al despegar con Shift"
+        echo "        log: $BUILD/logs/run-dash.log" >&2
         tail -10 "$BUILD/parkour-dash.out" >&2
       fi
+    else
+      ko "el motor no arranco con adelante, espacio y Shift"
+      tail -10 "$BUILD/parkour-dash.out" >&2
+    fi
 
-      # "frenando la caida" solo sale si el recorte trabajo de verdad: el jugador
-      # iba a caer a mas de 200 y el tope lo paro. Sin eso, el planeo estara
-      # puesto pero no frenaria nada.
+    # 3. Planeo, en su propia pista (src/test/glide.map).
+    #
+    # Alli el jugador cae de cabeza desde 3000 y no hay nada que pulsar todavia. El
+    # banco le pone Shift a los ~1,5 s, con la caida en curso, y asi el tope de 200
+    # entra en juego de verdad. El aviso "frenando la caida" solo sale si el recorte
+    # trabajo, asi que es lo unico que demuestra que frena y no solo que se pone.
+    if "$BUILD/bin/direkt-bsp" "$REPO_ROOT/src/test/glide.map" \
+         "$BUILD/datos/id1/maps/glide.bsp" >"$BUILD/bsp-glide.out" 2>&1; then
+      ok "la pista de planeo compila"
+    else
+      ko "la pista de planeo no compila"
+      tail -5 "$BUILD/bsp-glide.out" >&2
+    fi
+
+    GLIDE_LOG="$BUILD/logs/run-glide.log"
+    if "$REPO_ROOT/scripts/run-headless.sh" --map glide --settle 1 --min-lit 0 \
+         --tecla "shift:7" >"$BUILD/parkour-glide.out" 2>&1; then
+      _planeo="$(grep -c "DIREKT: planeo frenando la caida" "$GLIDE_LOG" || true)"
+      _puesto="$(grep -c "DIREKT: planeo" "$GLIDE_LOG" || true)"
+
+      if ((_puesto > 0)); then
+        ok "el planeo se pone mientras se cae ($_puesto avisos)"
+      else
+        ko "el planeo no se pone nunca"
+        echo "        log: $GLIDE_LOG" >&2
+        tail -10 "$BUILD/parkour-glide.out" >&2
+      fi
+
       if ((_planeo > 0)); then
         ok "el planeo frena la caida de verdad ($_planeo avisos)"
       else
         ko "el planeo no frena la caida: no sale el aviso del recorte"
-        tail -10 "$BUILD/parkour-dash.out" >&2
+        echo "        log: $GLIDE_LOG" >&2
+        tail -10 "$BUILD/parkour-glide.out" >&2
       fi
     else
-      ko "el motor no arranco con Shift en el hueco"
-      tail -10 "$BUILD/parkour-dash.out" >&2
+      ko "el motor no arranco con Shift en la pista de planeo"
+      tail -10 "$BUILD/parkour-glide.out" >&2
     fi
 
     # 4. Carrera por la pared: correr pegado al muro y saltar.
@@ -637,19 +679,13 @@ else
     # una, y lo normal es una: con la tecla mantenida solo se entra al pulsar.
     #
     # Pero el banco de pruebas no siempre ve la tecla continua. X11 manda
-    # repeticiones de teclado y segun como llegan al motor se ven como
-    # pulsar-soltar; se ha medido que con Ctrl mantenido el juego recibe varias
-    # sueltas en una sesion (Key_ClearStates no interviene, asi que no es del motor).
-    # El juego tiene una gracia de medio segundo para que eso no le llegue al
-    # jugador, pero en el banco alguna se cuela y el deslizamiento se repite.
-    #
-    # Por eso se permiten hasta 4 y no 1: lo que se comprueba de verdad es que
-    # funciona, que sale por encima del tope de agachado y que se acaba, no cuantas
-    # veces ha entrado.
-    if ((_entradas >= 1 && _entradas <= 4)); then
+    # Una pulsacion de Ctrl tiene que dar exactamente un deslizamiento. Antes se
+    # permitian hasta 4 porque se creia que el teclado de X hacia esto solo, y en
+    # realidad era un bloque del arnes de pruebas repetido cuatro veces.
+    if ((_entradas == 1)); then
       ok "el deslizamiento entra y se acaba ($_entradas veces)"
     else
-      ko "el deslizamiento se repite mas de la cuenta: $_entradas veces"
+      ko "el deslizamiento no se repite, $_entradas veces"
       echo "        log: $LOG" >&2
     fi
   else

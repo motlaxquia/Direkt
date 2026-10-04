@@ -285,156 +285,38 @@ for ((j = 0; j < 120; j++)); do
 done
 ((loaded)) && info "mundo cargado en ${j}s (mas ${SETTLE}s de asentar)" || info "aviso: no se confirmo la entrada al mundo"
 
-# --------------------------------------------------- tecla pulsada de verdad
+# --------------------------------------------------- teclas pulsadas de verdad
 #
-# Se pulsa con xdotool contra el Xvfb de este mismo display. Se hace aparte del
-# asiento para que la tecla este DOWN justo cuando toca: se suelta antes y se
-# vuelve a pulsar, que es lo que hace un jugador.
+# Las teclas van con xdotool contra el Xvfb de este mismo display, porque hay cosas
+# que a "+algo" no llegan: el motor no reenvia al juego el comando que tiene
+# enlazado, sino que el juego ve si la tecla esta pulsada. El parkour entero
+# depende de eso (Shift y Ctrl), asi que sin esto no se puede comprobar.
 #
-# xdotool solo viene en el banco de pruebas de Linux (apt-get install xdotool).
-# Si no esta, se dice y se sigue: la prueba que dependa de esto se salta sola en
-# vez de dar un falso negativo.
-pulsar_tecla=0
-if [[ -n "$TECLA" ]]; then
-  if command -v xdotool >/dev/null 2>&1; then
-    pulsar_tecla=1
-  else
-    info "aviso: xdotool no esta, la tecla $TECLA no se puede pulsar"
-  fi
-fi
-if ((pulsar_tecla)); then
-  ((TECLA_SEGUNDOS > 0)) || TECLA_SEGUNDOS="$SETTLE"
-  if ((TECLA_ESPERA > 0)); then
-    info "esperando ${TECLA_ESPERA}s antes de pulsar $TECLA"
-    sleep "$TECLA_ESPERA"
-  fi
-  if [[ -n "$TEST_DE" && "$TEST_DE" -gt 0 ]]; then
-    info "esperando ${TEST_DE}s (--test-de) antes de pulsar $TECLA"
-    sleep "$TEST_DE"
-  fi
-  # El acorde se parte en teclas sueltas: xdotool keydown solo admite una.
-  IFS=+ read -r -a _partes <<<"$TECLA"
+# --tecla Shift:5:3    5 segundos de pulsacion, empezando 3 s despues de entrar
+# --golpes ESPACIO:5:0.5   5 pulsaciones, una cada 0,5 s, cada una de 0,2 s
+#
+# El "+" es un acorde ("shift+espacio"). El orden importa: los modificadores se
+# pulsan DESPUES. Con shift ya pulsado, el espacio llega al motor como otra cosa y el
+# boton de salto no aparece (probado: "shift+space" no salta, "space+shift" si). No
+# es un problema del juego sino de como envia X11 las teclas combinadas, asi que el
+# arnes lo resuelve solo y las pruebas no tienen que acordarse.
+#
+# xdotool solo viene en el banco de pruebas de Linux (scripts/setup-deps.sh lo
+# instala). Si no esta, se avisa y se sigue: las pruebas que dependan de esto se
+# saltan solas en vez de dar un falso negativo.
 
-  # El orden importa: los modificadores se pulsan DESPUES. Con shift ya pulsado,
-  # el espacio llega al motor como otra cosa y el boton de salto no aparece
-  # (probado: "shift+space" no salta, "space+shift" si). No es un problema del
-  # juego sino de como envia X11 las teclas combinadas, asi que el arnés lo
-  # resuelve solo y asi las pruebas no tienen que acordarse.
-  _mods=()
-  _normales=()
-  for _p in "${_partes[@]}"; do
-    case "${_p,,}" in
-      shift|shift_l|shift_r|control|ctrl|alt|super|meta) _mods+=("$_p") ;;
-      *) _normales+=("$_p") ;;
-    esac
-  done
-  _partes=("${_normales[@]}" "${_mods[@]}")
-
-  # El autorepeat del teclado se quita antes de pulsar nada.
-  #
-  # X11 manda repeticiones mientras una tecla esta mantenida, y segun como llegan
-  # al motor se ven como pulsar-soltar: con Ctrl mantenido quince segundos el
-  # motor recibia cuatro sueltas y el juego se enteraba de cuatro veces que el
-  # jugador lo habia soltado. Sin autorepeat el problema desaparece.
-  #
-  # Es solo para el banco: en el juego de verdad el autorepeat lo gestiona el
-  # motor, que ya ignora una repeticion si tenia la tecla pulsada, y el juego
-  # tiene su propia gracia por si acaso.
-  if command -v xset >/dev/null 2>&1; then
-    xset r off 2>/dev/null || true
-  fi
-
-  for _p in "${_partes[@]}"; do
-    xdotool keyup "$_p" 2>/dev/null || true
-  done
-  sleep 0.5
-  for _p in "${_partes[@]}"; do
-    xdotool keydown "$_p" 2>/dev/null || true
-  done
-  info "tecla(s) $TECLA pulsada(s) ${TECLA_SEGUNDOS}s"
-
-  # La tecla se reafirma mientras se mantiene.
-  #
-  # X11 manda repeticiones de teclado y, segun como lleguen al motor, una repeticion
-  # puede verse como pulsar-soltar: con Shift mantenido se han medido cuatro sueltas en
-  # quince segundos, a intervalos regulares. El juego lo ve como cuatro veces que el
-  # jugador suelta la tecla.
-  #
-  # Reafirmar cada 0,1 s lo tapa: el motor ignora una repeticion si ya tenia la tecla
-  # pulsada, y si en medio se cuela una suelta dura 0,1 s, que es menos que la gracia
-  # de 0,4 s del juego.
-  _restantes="$TECLA_SEGUNDOS"
-  while [[ "$_restantes" != 0.* && "$_restantes" != 0 ]]; do
-    sleep 0.1
-    for _p in "${_partes[@]}"; do
-      xdotool keydown "$_p" 2>/dev/null || true
-    done
-    if awk "BEGIN{exit !($_restantes > 0.1)}" 2>/dev/null; then
-      _restantes="$(awk "BEGIN{printf \"%.1f\", $_restantes - 0.1}")"
-    else
-      _restantes=0
-    fi
-  done
-  for _p in "${_partes[@]}"; do
-    xdotool keyup "$_p" 2>/dev/null || true
-  done
+# El autorepeat del teclado de X se quita antes de pulsar nada. X manda
+# repeticiones mientras una tecla esta mantenida y, segun como lleguen, el motor
+# las ve como pulsar-soltar. No es un problema del juego (que ya tiene gracia para
+# los frames perdidos) pero en el banco solo estorba.
+if command -v xset >/dev/null 2>&1; then
+  xset r off 2>/dev/null || true
 fi
 
-# Los golpes siguen corriendo: se espera a que acaben antes de la captura, o se
-# mediria al jugador en mitad de un salto.
-for _p in "${pids_golpes[@]}"; do
-  wait "$_p" 2>/dev/null || true
-done
-
-if ((pulsar_tecla)); then
-  ((TECLA_SEGUNDOS > 0)) || TECLA_SEGUNDOS="$SETTLE"
-  if ((TECLA_ESPERA > 0)); then
-    info "esperando ${TECLA_ESPERA}s antes de pulsar $TECLA"
-    sleep "$TECLA_ESPERA"
-  fi
-  if [[ -n "$TEST_DE" && "$TEST_DE" -gt 0 ]]; then
-    info "esperando ${TEST_DE}s (--test-de) antes de pulsar $TECLA"
-    sleep "$TEST_DE"
-  fi
-  # El acorde se parte en teclas sueltas: xdotool keydown solo admite una.
-  IFS=+ read -r -a _partes <<<"$TECLA"
-
-  # El orden importa: los modificadores se pulsan DESPUES. Con shift ya pulsado,
-  # el espacio llega al motor como otra cosa y el boton de salto no aparece
-  # (probado: "shift+space" no salta, "space+shift" si). No es un problema del
-  # juego sino de como envia X11 las teclas combinadas, asi que el arnés lo
-  # resuelve solo y asi las pruebas no tienen que acordarse.
-  _mods=()
-  _normales=()
-  for _p in "${_partes[@]}"; do
-    case "${_p,,}" in
-      shift|shift_l|shift_r|control|ctrl|alt|super|meta) _mods+=("$_p") ;;
-      *) _normales+=("$_p") ;;
-    esac
-  done
-  _partes=("${_normales[@]}" "${_mods[@]}")
-
-  for _p in "${_partes[@]}"; do
-    xdotool keyup "$_p" 2>/dev/null || true
-  done
-  sleep 0.5
-  for _p in "${_partes[@]}"; do
-    xdotool keydown "$_p" 2>/dev/null || true
-  done
-  info "tecla(s) $TECLA pulsada(s) ${TECLA_SEGUNDOS}s"
-  sleep "$TECLA_SEGUNDOS"
-  for _p in "${_partes[@]}"; do
-    xdotool keyup "$_p" 2>/dev/null || true
-  done
-fi
-
-# --------------------------------------------------- pulsaciones sueltas
-#
-# Van en segundo plano porque tienen que solaparse con la tecla mantenida de mas
-# abajo: "mantener Shift mientras se salta" son las dos cosas a la vez, y si se
-# ejecutaran en fila, los saltos se acabarian antes de que llegara el modificador.
-pids_golpes=()
-
+# Las pulsaciones sueltas van en segundo plano porque tienen que solaparse con la
+# tecla mantenida: "mantener Shift mientras se salta" son las dos cosas a la vez, y
+# si se ejecutaran en fila los saltos se acabarian antes de que llegara el
+# modificador.
 golpes_en_fondo() {
   if [[ -z "$GOLPES" ]]; then
     return 0
@@ -450,8 +332,9 @@ golpes_en_fondo() {
   [[ -n "$GOLPES_INTERVALO" ]] || GOLPES_INTERVALO=0.5
   info "$GOLPES_VECES pulsaciones de $GOLPES cada ${GOLPES_INTERVALO}s"
 
-  IFS=+ read -r -a _golpes <<<"$GOLPES"
   local _g _p
+  local -a _golpes=()
+  IFS=+ read -r -a _golpes <<<"$GOLPES"
   for ((_g = 0; _g < GOLPES_VECES; _g++)); do
     for _p in "${_golpes[@]}"; do
       xdotool keydown "$_p" 2>/dev/null || true
@@ -464,29 +347,30 @@ golpes_en_fondo() {
   done
 }
 
+pids_golpes=()
 golpes_en_fondo &
 pids_golpes+=("$!")
 
-if ((pulsar_tecla)); then
+# La tecla mantenida va en primer plano.
+if [[ -n "$TECLA" ]] && ! command -v xdotool >/dev/null 2>&1; then
+  info "aviso: xdotool no esta, la tecla $TECLA no se puede pulsar"
+fi
+
+if [[ -n "$TECLA" ]] && command -v xdotool >/dev/null 2>&1; then
   ((TECLA_SEGUNDOS > 0)) || TECLA_SEGUNDOS="$SETTLE"
   if ((TECLA_ESPERA > 0)); then
     info "esperando ${TECLA_ESPERA}s antes de pulsar $TECLA"
     sleep "$TECLA_ESPERA"
   fi
-  if [[ -n "$TEST_DE" && "$TEST_DE" -gt 0 ]]; then
+  if [[ -n "$TEST_DE" ]]; then
     info "esperando ${TEST_DE}s (--test-de) antes de pulsar $TECLA"
     sleep "$TEST_DE"
   fi
-  # El acorde se parte en teclas sueltas: xdotool keydown solo admite una.
-  IFS=+ read -r -a _partes <<<"$TECLA"
 
-  # El orden importa: los modificadores se pulsan DESPUES. Con shift ya pulsado,
-  # el espacio llega al motor como otra cosa y el boton de salto no aparece
-  # (probado: "shift+space" no salta, "space+shift" si). No es un problema del
-  # juego sino de como envia X11 las teclas combinadas, asi que el arnés lo
-  # resuelve solo y asi las pruebas no tienen que acordarse.
-  _mods=()
-  _normales=()
+  # El acorde se parte en teclas sueltas porque xdotool keydown solo admite una, y
+  # los modificadores van los ultimos.
+  _partes=(); _mods=(); _normales=()
+  IFS=+ read -r -a _partes <<<"$TECLA"
   for _p in "${_partes[@]}"; do
     case "${_p,,}" in
       shift|shift_l|shift_r|control|ctrl|alt|super|meta) _mods+=("$_p") ;;
@@ -509,74 +393,11 @@ if ((pulsar_tecla)); then
   done
 fi
 
-if ((pulsar_tecla)); then
-  ((TECLA_SEGUNDOS > 0)) || TECLA_SEGUNDOS="$SETTLE"
-  if ((TECLA_ESPERA > 0)); then
-    info "esperando ${TECLA_ESPERA}s antes de pulsar $TECLA"
-    sleep "$TECLA_ESPERA"
-  fi
-  if [[ -n "$TEST_DE" && "$TEST_DE" -gt 0 ]]; then
-    info "esperando ${TEST_DE}s (--test-de) antes de pulsar $TECLA"
-    sleep "$TEST_DE"
-  fi
-  # El acorde se parte en teclas sueltas: xdotool keydown solo admite una.
-  IFS=+ read -r -a _partes <<<"$TECLA"
-
-  # El orden importa: los modificadores se pulsan DESPUES. Con shift ya pulsado,
-  # el espacio llega al motor como otra cosa y el boton de salto no aparece
-  # (probado: "shift+space" no salta, "space+shift" si). No es un problema del
-  # juego sino de como envia X11 las teclas combinadas, asi que el arnés lo
-  # resuelve solo y asi las pruebas no tienen que acordarse.
-  _mods=()
-  _normales=()
-  for _p in "${_partes[@]}"; do
-    case "${_p,,}" in
-      shift|shift_l|shift_r|control|ctrl|alt|super|meta) _mods+=("$_p") ;;
-      *) _normales+=("$_p") ;;
-    esac
-  done
-  _partes=("${_normales[@]}" "${_mods[@]}")
-
-  for _p in "${_partes[@]}"; do
-    xdotool keyup "$_p" 2>/dev/null || true
-  done
-  sleep 0.5
-  for _p in "${_partes[@]}"; do
-    xdotool keydown "$_p" 2>/dev/null || true
-  done
-  info "tecla(s) $TECLA pulsada(s) ${TECLA_SEGUNDOS}s"
-  sleep "$TECLA_SEGUNDOS"
-  for _p in "${_partes[@]}"; do
-    xdotool keyup "$_p" 2>/dev/null || true
-  done
-fi
-
-# --------------------------------------------------- pulsaciones sueltas
-if [[ -n "$GOLPES" ]]; then
-  if command -v xdotool >/dev/null 2>&1; then
-    # Sin comprobacion aritmetica: el intervalo puede ser "0.6" y bash entero se
-    # queja de los decimales.
-    [[ -n "$GOLPES_VECES" ]] || GOLPES_VECES=1
-    [[ -n "$GOLPES_INTERVALO" ]] || GOLPES_INTERVALO=0.5
-    info "$GOLPES_VECES pulsaciones de $GOLPES cada ${GOLPES_INTERVALO}s"
-    # keydown y keyup por separado, con medio segundo de pulsacion: con el
-    # "key --repeat" de xdotool la pulsacion dura 12 ms, que a 60 frames por
-    # segundo se pierde entera y el motor nunca ve el boton.
-    IFS=+ read -r -a _golpes <<<"$GOLPES"
-    for ((_g = 0; _g < GOLPES_VECES; _g++)); do
-      for _p in "${_golpes[@]}"; do
-        xdotool keydown "$_p" 2>/dev/null || true
-      done
-      sleep 0.2
-      for _p in "${_golpes[@]}"; do
-        xdotool keyup "$_p" 2>/dev/null || true
-      done
-      sleep "$GOLPES_INTERVALO"
-    done
-  else
-    info "aviso: xdotool no esta, $GOLPES no se puede pulsar"
-  fi
-fi
+# Los golpes siguen corriendo: se espera a que acaben antes del asiento, o se
+# mediria al jugador en mitad de un salto.
+for _p in "${pids_golpes[@]}"; do
+  wait "$_p" 2>/dev/null || true
+done
 
 sleep "$SETTLE"
 
